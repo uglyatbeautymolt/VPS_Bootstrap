@@ -11,7 +11,7 @@ docker compose -f "$STACK_DIR/docker-compose.yml" stop openclaw 2>/dev/null || t
 
 # Eingebauten Backup-Befehl nutzen
 docker run --rm \
-  -v "$STACK_DIR/openclaw-data:/root/.openclaw" \
+  -v "$STACK_DIR/openclaw-data:/home/node/.openclaw" \
   -v "$DEST:/backup" \
   ghcr.io/openclaw/openclaw:latest \
   openclaw backup create --output /backup --verify
