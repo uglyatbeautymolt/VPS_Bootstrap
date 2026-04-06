@@ -337,10 +337,11 @@ fi
 # n8n Workflows + Credentials importieren
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren..."
-  docker compose exec -T n8n \
-    n8n import:workflow --input=/home/node/.n8n/workflows-backup.json 2>/dev/null || true
-  docker compose exec -T n8n \
-    n8n import:credentials --input=/home/node/.n8n/credentials-backup.json 2>/dev/null || true
+  docker cp "$STACK_DIR/n8n-data/workflows-backup.json" n8n:/tmp/workflows-backup.json
+  docker cp "$STACK_DIR/n8n-data/credentials-backup.json" n8n:/tmp/credentials-backup.json
+  docker exec n8n n8n import:workflow --input=/tmp/workflows-backup.json 2>/dev/null || true
+  docker exec n8n n8n import:credentials --input=/tmp/credentials-backup.json 2>/dev/null || true
+  rm -f "$STACK_DIR/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/credentials-backup.json"
   log "n8n Workflows importiert"
 fi
 
