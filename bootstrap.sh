@@ -73,10 +73,17 @@ BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
 [ -z "$BACKUP_GPG_PASSWORD" ] || [ "$BACKUP_GPG_PASSWORD" = "null" ] \
   && fail "BACKUP_GPG_PASSWORD nicht in Bitwarden gefunden"
 
+# GitHub Token holen
+GITHUB_TOKEN=$(bw get item "GITHUB_TOKEN" \
+  --session "$BW_SESSION" | jq -r '.login.password')
+
+[ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "null" ] \
+  && fail "GITHUB_TOKEN nicht in Bitwarden gefunden"
+
 # Bitwarden sperren
 bw lock --session "$BW_SESSION" &>/dev/null
 unset BW_SESSION BW_EMAIL
-log "GPG Passwort aus Bitwarden geholt — Bitwarden gesperrt"
+log "GPG Passwort + GitHub Token aus Bitwarden geholt — Bitwarden gesperrt"
 
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 2 — USER ALEX ANLEGEN
@@ -157,6 +164,15 @@ log ".env entschlüsselt"
 # Verzeichnisse anlegen
 mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 
+# Laufzeit-Dateien ignorieren
+grep -q "roundcube-data/" "$STACK_DIR/.gitignore" \
+  || echo "roundcube-data/" >> "$STACK_DIR/.gitignore"
+grep -q "backup/www-sync.sh" "$STACK_DIR/.gitignore" \
+  || echo "backup/www-sync.sh" >> "$STACK_DIR/.gitignore"
+grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
+  || echo "backup/.www-checksum" >> "$STACK_DIR/.gitignore"
+log ".gitignore aktualisiert"
+
 # n8n läuft als User node (UID 1000) — Volume muss entsprechend gehören
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 
@@ -205,6 +221,15 @@ acl = private
 RCLONE
 
 chown -R alex:alex "$STACK_DIR"
+
+# Git Remote mit Token konfigurieren — als alex
+sudo -u alex git -C "$STACK_DIR" remote set-url origin \
+  "https://${GITHUB_TOKEN}@github.com/uglyatbeautymolt/VPS_Bootstrap.git"
+sudo -u alex git -C "$STACK_DIR" config user.name "Ugly"
+sudo -u alex git -C "$STACK_DIR" config user.email "ugly@beautymolt.com"
+unset GITHUB_TOKEN
+log "Git Remote mit Token konfiguriert (alex kann pushen)"
+
 log "Repository geclont und konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
