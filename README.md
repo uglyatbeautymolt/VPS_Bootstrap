@@ -70,7 +70,7 @@ docker compose restart
 docker compose pull && docker compose up -d
 
 # Container-Shell
-docker exec -it ugly-agent bash
+docker exec -it openclaw bash
 docker exec -it n8n sh
 
 # Backup manuell

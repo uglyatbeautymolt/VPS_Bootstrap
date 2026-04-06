@@ -24,7 +24,7 @@ services:
 
   openclaw:
     image: ghcr.io/openclaw/openclaw:latest
-    container_name: ugly-agent
+    container_name: openclaw
     restart: unless-stopped
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}

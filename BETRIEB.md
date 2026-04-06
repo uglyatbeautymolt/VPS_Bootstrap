@@ -81,7 +81,7 @@ docker compose ps
 docker compose logs --tail=50
 
 # Jeden Service einzeln prüfen
-docker compose logs ugly-agent --tail=20
+docker compose logs openclaw --tail=20
 docker compose logs n8n --tail=20
 docker compose logs searxng --tail=20
 docker compose logs nginx --tail=20
@@ -115,16 +115,16 @@ nano ~/ugly-stack/.env
 
 # Nach Änderung den Container neu starten
 cd ~/ugly-stack
-docker compose up -d --force-recreate ugly-agent
+docker compose up -d --force-recreate openclaw
 ```
 
 ### Welcher Container braucht welchen Key?
 
 | Secret | Container |
 |--------|-----------|
-| TELEGRAM_BOT_TOKEN | ugly-agent |
-| OPENROUTER_API_KEY | ugly-agent |
-| OPENCLAW_GATEWAY_TOKEN | ugly-agent |
+| TELEGRAM_BOT_TOKEN | openclaw |
+| OPENROUTER_API_KEY | openclaw |
+| OPENCLAW_GATEWAY_TOKEN | openclaw |
 | N8N_* | n8n |
 | CLOUDFLARE_TUNNEL_TOKEN | cloudflared |
 | ZOHO_SMTP_* | n8n |
@@ -151,7 +151,7 @@ docker compose ps
 docker compose restart
 
 # Einen Container neu starten
-docker compose restart ugly-agent
+docker compose restart openclaw
 
 # Stack stoppen
 docker compose down
@@ -163,13 +163,13 @@ docker compose up -d
 docker compose pull && docker compose up -d
 
 # Einen Container mit neuer .env neu starten
-docker compose up -d --force-recreate ugly-agent
+docker compose up -d --force-recreate openclaw
 
 # Logs live
 docker compose logs -f
 
 # Logs eines einzelnen Containers
-docker compose logs ugly-agent -f --tail=100
+docker compose logs openclaw -f --tail=100
 ```
 
 ---
@@ -179,7 +179,7 @@ docker compose logs ugly-agent -f --tail=100
 ### OpenClaw (Ugly)
 ```bash
 # Shell im Container
-docker exec -it ugly-agent bash
+docker exec -it openclaw bash
 
 # Wichtige Dateien direkt editieren (via Volume — kein Container nötig)
 nano ~/ugly-stack/openclaw-data/MEMORY.md
@@ -188,7 +188,7 @@ nano ~/ugly-stack/openclaw-data/USER.md
 nano ~/ugly-stack/openclaw-data/SOUL.md
 
 # Nach Änderungen Container neu starten
-docker compose restart ugly-agent
+docker compose restart openclaw
 ```
 
 ### n8n
@@ -283,7 +283,7 @@ Nach diesen Ereignissen immer manuell ein Backup auslösen:
 ### Nach OpenClaw-Restore
 Falls Telegram neu authentifiziert werden muss:
 ```bash
-docker exec -it ugly-agent openclaw gateway --setup
+docker exec -it openclaw openclaw gateway --setup
 ```
 
 ---
@@ -354,7 +354,7 @@ grep TELEGRAM_BOT_TOKEN ~/ugly-stack/.env
 ./set-secret.sh TELEGRAM_BOT_TOKEN "neuer-token"
 
 # Gateway neu einrichten
-docker exec -it ugly-agent openclaw gateway --setup
+docker exec -it openclaw openclaw gateway --setup
 ```
 
 ### Stack komplett neu aufsetzen (Neuinstallation)
@@ -468,7 +468,7 @@ Alle Routes auf `http://localhost:80` ändern:
 ### Schritt 5 — OpenClaw Onboarding
 
 ```bash
-docker exec -it ugly-agent bash
+docker exec -it openclaw bash
 openclaw onboard
 openclaw gateway start
 ```
@@ -510,5 +510,5 @@ docker compose exec n8n n8n import:credentials \
   --input=/home/node/.n8n/credentials-backup.json
 
 # OpenClaw antwortet nicht auf Telegram
-docker exec -it ugly-agent openclaw gateway --setup
+docker exec -it openclaw openclaw gateway --setup
 ```

@@ -7,7 +7,7 @@ DEST="$STAGING/openclaw-data"
 mkdir -p "$DEST"
 
 # Gateway stoppen für konsistentes Backup
-docker compose -f "$STACK_DIR/docker-compose.yml" stop ugly-agent 2>/dev/null || true
+docker compose -f "$STACK_DIR/docker-compose.yml" stop openclaw 2>/dev/null || true
 
 # Eingebauten Backup-Befehl nutzen
 docker run --rm \
@@ -20,7 +20,7 @@ docker run --rm \
 BACKUP_FILE=$(ls "$DEST"/*.tar.gz 2>/dev/null | head -1)
 if [ -z "$BACKUP_FILE" ]; then
   echo "OpenClaw: FEHLER — kein Backup erstellt"
-  docker compose -f "$STACK_DIR/docker-compose.yml" start ugly-agent
+  docker compose -f "$STACK_DIR/docker-compose.yml" start openclaw
   exit 1
 fi
 
@@ -34,4 +34,4 @@ echo "OpenClaw: Backup erstellt und verifiziert → $(basename $BACKUP_FILE)"
 echo "  Inhalt: $(tar -tzf $BACKUP_FILE | wc -l) Dateien"
 
 # Gateway wieder starten
-docker compose -f "$STACK_DIR/docker-compose.yml" start ugly-agent
+docker compose -f "$STACK_DIR/docker-compose.yml" start openclaw
