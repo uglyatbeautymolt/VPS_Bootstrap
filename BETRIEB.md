@@ -23,12 +23,12 @@ Bevor du `bootstrap.sh` startest, sammle folgende Informationen:
 | `OPENROUTER_API_KEY` | openrouter.ai → Keys |
 | `TELEGRAM_BOT_TOKEN` | @BotFather auf Telegram — bestehenden weiterverwenden |
 | `OPENCLAW_GATEWAY_TOKEN` | Selbst wählen — bestehenden weiterverwenden |
-| `N8N_BASIC_AUTH_USER` | Selbst wählen |
+| `N8N_BASIC_AUTH_USER` | alex@alexstuder.ch |
 | `N8N_BASIC_AUTH_PASSWORD` | Selbst wählen |
 | `N8N_ENCRYPTION_KEY` | `openssl rand -hex 16` — bestehenden beibehalten! |
-| `ZOHO_SMTP_USER` | ugly@beautymolt.com |
+| `ZOHO_SMTP_USER` | uglybeautymolt@zohomail.eu |
 | `ZOHO_SMTP_PASSWORD` | Zoho Mail → Einstellungen → SMTP |
-| `BREVO_SMTP_USER` | Brevo Login E-Mail (alex@alexstuder.ch) |
+| `BREVO_SMTP_USER` | alex@alexstuder.ch |
 | `BREVO_SMTP_API_KEY` | Brevo → SMTP & API → API Keys |
 | `BACKUP_GPG_PASSWORD` | In Bitwarden — wird automatisch geholt |
 | `CF_R2_ACCESS_KEY` | Cloudflare → R2 → Manage API Tokens |
