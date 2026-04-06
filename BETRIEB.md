@@ -398,3 +398,109 @@ chmod +x bootstrap.sh
             ├── nginx.sh
             └── www.sh
 ```
+
+---
+
+## Migration — Alter VPS → Neuer VPS
+
+### Reihenfolge einhalten — kein Ausfall wenn korrekt durchgeführt!
+
+### Schritt 1 — Backups auf altem VPS aktualisieren
+
+```bash
+# Manuelles Backup auslösen
+~/ugly-stack/backup/backup-master.sh
+
+# www Backup zu R2
+~/backup-www.sh
+
+# Prüfen ob alles in R2 ist
+rclone ls r2:ugly-vps-backup/ --config ~/.config/rclone/rclone.conf
+```
+
+### Schritt 2 — Neuen VPS aufsetzen
+
+```bash
+# Als root auf dem neuen VPS
+curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh \
+  -o bootstrap.sh
+chmod +x bootstrap.sh
+./bootstrap.sh
+```
+
+Fragt nur nach:
+1. Bitwarden E-Mail
+2. Bitwarden Master-Passwort
+
+### Schritt 3 — Services auf neuem VPS prüfen
+
+```bash
+cd ~/ugly-stack
+docker compose ps
+docker compose logs --tail=30
+```
+
+### Schritt 4 — Cloudflare Tunnel Routes anpassen
+
+**Erst machen wenn der neue VPS läuft!**
+
+Cloudflare Dashboard → Zero Trust → Networks → Tunnels → beautymoltTunnel → Edit → Routes
+
+Alle Routes auf `http://localhost:80` ändern:
+
+| Subdomain | Alt | Neu |
+|-----------|-----|-----|
+| `claw.beautymolt.com` | `http://localhost:48116` | `http://localhost:80` |
+| `www.beautymolt.com` | `http://localhost:80` | bleibt gleich ✓ |
+| `search.beautymolt.com` | `http://localhost:8888` | `http://localhost:80` |
+| `n8n.beautymolt.com` | `http://localhost:5678` | `http://localhost:80` |
+| `mail.beautymolt.com` | `http://localhost:8080` | `http://localhost:80` |
+| `dashboard.beautymolt.com` | löschen | — |
+
+### Schritt 5 — OpenClaw Onboarding
+
+```bash
+docker exec -it ugly-agent bash
+openclaw onboard
+openclaw gateway start
+```
+
+### Schritt 6 — Services testen
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" https://www.beautymolt.com
+curl -s -o /dev/null -w "%{http_code}" https://search.beautymolt.com
+curl -s -o /dev/null -w "%{http_code}" https://n8n.beautymolt.com
+curl -s -o /dev/null -w "%{http_code}" https://claw.beautymolt.com
+```
+
+Alle sollten `200` zurückgeben.
+
+### Schritt 7 — Alten VPS herunterfahren
+
+Erst wenn alles funktioniert:
+
+```bash
+# Auf dem alten VPS
+sudo poweroff
+```
+
+Dann alten VPS bei Hostinger löschen.
+
+### Troubleshooting
+
+```bash
+# Tunnel verbindet sich nicht
+docker compose logs cloudflared
+
+# nginx Problem
+docker exec nginx nginx -t
+docker compose restart nginx
+
+# n8n Credentials fehlen
+docker compose exec n8n n8n import:credentials \
+  --input=/home/node/.n8n/credentials-backup.json
+
+# OpenClaw antwortet nicht auf Telegram
+docker exec -it ugly-agent openclaw gateway --setup
+```
