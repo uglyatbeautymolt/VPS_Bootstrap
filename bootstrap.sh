@@ -313,6 +313,10 @@ docker compose up -d
 sleep 30
 docker compose ps
 
+# FIX 1: openclaw-data Ownership für Backups — alex muss lesen können
+chown -R alex:alex "$STACK_DIR/openclaw-data"
+log "openclaw-data Ownership auf alex gesetzt (für Backups)"
+
 # OpenClaw Token aus Config lesen und .env aktualisieren
 NEW_TOKEN=$(docker exec openclaw cat /home/node/.openclaw/openclaw.json 2>/dev/null \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('gateway',{}).get('auth',{}).get('token',''))" 2>/dev/null)
@@ -355,6 +359,17 @@ if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   log "n8n Workflows importiert"
 fi
 
+# FIX 2: SearXNG JSON API aktivieren
+if [ -f "$STACK_DIR/searxng-data/settings.yml" ]; then
+  if ! grep -q "^\s*- json" "$STACK_DIR/searxng-data/settings.yml"; then
+    sed -i 's/^\s*- html$/  - html\n  - json/' "$STACK_DIR/searxng-data/settings.yml"
+    docker restart searxng 2>/dev/null || true
+    log "SearXNG JSON API aktiviert"
+  else
+    log "SearXNG JSON API bereits aktiv"
+  fi
+fi
+
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 7 — CRON + FIREWALL
 # ─────────────────────────────────────────────────────────────
@@ -369,7 +384,7 @@ log "Backup-Cron eingerichtet (täglich 03:00)"
 
 # .env.gpg Sync-Cron — verschlüsselt .env und pusht zu GitHub
 (crontab -u alex -l 2>/dev/null; \
-  echo "*/30 * * * * cd $STACK_DIR && gpg --batch --yes --passphrase \"\$BACKUP_GPG_PASSWORD\" --symmetric --cipher-algo AES256 -o .env.gpg .env && git add .env.gpg && git diff --cached --quiet || git commit -m 'update: .env sync' && git push origin main") \
+  echo "*/30 * * * * cd $STACK_DIR && source $STACK_DIR/.env && gpg --batch --yes --passphrase \"\$BACKUP_GPG_PASSWORD\" --symmetric --cipher-algo AES256 -o .env.gpg .env && git add .env.gpg && git diff --cached --quiet || git commit -m 'update: .env sync' && git push origin main") \
   | crontab -u alex -
 log ".env Sync-Cron eingerichtet (alle 30 Min)"
 
@@ -382,7 +397,7 @@ log "Firewall konfiguriert"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║      Installation abgeschlossen          ║"
+echo "║      Installation abgeschlossen!         ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 echo "  Stack:    $STACK_DIR"
@@ -396,4 +411,7 @@ echo "    search.beautymolt.com  → SearXNG"
 echo "    n8n.beautymolt.com     → n8n"
 echo "    www.beautymolt.com     → nginx"
 echo "    mail.beautymolt.com    → Roundcube"
+echo ""
+echo "  WICHTIG: OpenClaw Telegram Onboarding noch nötig!"
+echo "  docker exec -it openclaw node /app/dist/index.js onboard"
 echo ""
