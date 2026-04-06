@@ -179,7 +179,8 @@ cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
         "https://claw.beautymolt.com/"
       ],
       "allowInsecureAuth": true,
-      "dangerouslyAllowHostHeaderOriginFallback": true
+      "dangerouslyAllowHostHeaderOriginFallback": true,
+      "dangerouslyDisableDeviceAuth": true
     }
   }
 }
@@ -323,7 +324,8 @@ if [ -n "$NEW_TOKEN" ] && [ "$NEW_TOKEN" != "null" ]; then
         "https://claw.beautymolt.com/"
       ],
       "allowInsecureAuth": true,
-      "dangerouslyAllowHostHeaderOriginFallback": true
+      "dangerouslyAllowHostHeaderOriginFallback": true,
+      "dangerouslyDisableDeviceAuth": true
     }
   }
 }
