@@ -157,6 +157,9 @@ log ".env entschlüsselt"
 # Verzeichnisse anlegen
 mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 
+# n8n läuft als User node (UID 1000) — Volume muss entsprechend gehören
+chown -R 1000:1000 "$STACK_DIR/n8n-data"
+
 # rclone konfigurieren
 source "$STACK_DIR/.env"
 mkdir -p "$STACK_DIR/rclone"
