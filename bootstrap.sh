@@ -217,6 +217,27 @@ if rclone ls "$N8N_CREDS" --config "$STACK_DIR/rclone/rclone.conf" &>/dev/null; 
   log "n8n Backup bereit"
 fi
 
+# www Webseite wiederherstellen
+WWW_LATEST=$(rclone ls "r2:${CF_R2_BUCKET}/www/" \
+  --config "$STACK_DIR/rclone/rclone.conf" 2>/dev/null \
+  | sort | tail -1 | awk '{print $2}')
+
+if [ -n "$WWW_LATEST" ]; then
+  info "www Backup wiederherstellen: $WWW_LATEST"
+  rclone copy "r2:${CF_R2_BUCKET}/www/$WWW_LATEST" /tmp/ \
+    --config "$STACK_DIR/rclone/rclone.conf"
+
+  gpg --batch --yes \
+    --passphrase "$BACKUP_GPG_PASSWORD" \
+    --decrypt "/tmp/$WWW_LATEST" \
+    | tar -xz -C "$STACK_DIR/www/"
+
+  rm -f "/tmp/$WWW_LATEST"
+  log "www Webseite wiederhergestellt → $STACK_DIR/www/"
+else
+  warn "Kein www Backup gefunden — leeres www Verzeichnis"
+fi
+
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 6 — STACK STARTEN
 # ─────────────────────────────────────────────────────────────
@@ -256,6 +277,54 @@ log "Backup-Cron eingerichtet (täglich 03:00)"
   echo "*/30 * * * * cd $STACK_DIR && gpg --batch --yes --passphrase \"\$BACKUP_GPG_PASSWORD\" --symmetric --cipher-algo AES256 -o .env.gpg .env && git add .env.gpg && git diff --cached --quiet || git commit -m 'update: .env sync' && git push origin main") \
   | crontab -u alex -
 log ".env Sync-Cron eingerichtet (alle 30 Min)"
+
+# www Backup-Cron — prüft auf Änderungen und lädt zu R2 hoch
+cat > "$STACK_DIR/backup/www-sync.sh" << 'WWWSYNC'
+#!/bin/bash
+# www Sync zu R2 — nur wenn Änderungen vorhanden
+STACK_DIR="/home/alex/ugly-stack"
+WWW_DIR="$STACK_DIR/www"
+CHECKSUM_FILE="$STACK_DIR/backup/.www-checksum"
+
+source "$STACK_DIR/.env"
+
+# Aktuellen Checksum berechnen
+CURRENT=$(find "$WWW_DIR" -type f -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)
+
+# Mit letztem Checksum vergleichen
+LAST=$(cat "$CHECKSUM_FILE" 2>/dev/null || echo "")
+
+if [ "$CURRENT" = "$LAST" ]; then
+  exit 0  # Keine Änderungen
+fi
+
+# Änderungen gefunden — Backup erstellen
+DATE=$(date +%Y%m%d_%H%M%S)
+tar -czf /tmp/www-backup-${DATE}.tar.gz -C "$WWW_DIR" .
+
+gpg --batch --yes \
+  --passphrase "$BACKUP_GPG_PASSWORD" \
+  --symmetric --cipher-algo AES256 \
+  /tmp/www-backup-${DATE}.tar.gz
+
+rclone copy /tmp/www-backup-${DATE}.tar.gz.gpg \
+  r2:${CF_R2_BUCKET}/www/ \
+  --config "$STACK_DIR/rclone/rclone.conf"
+
+rm -f /tmp/www-backup-${DATE}.tar.gz \
+      /tmp/www-backup-${DATE}.tar.gz.gpg
+
+# Checksum aktualisieren
+echo "$CURRENT" > "$CHECKSUM_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] www Backup → R2: www-backup-${DATE}.tar.gz.gpg"
+WWWSYNC
+
+chmod +x "$STACK_DIR/backup/www-sync.sh"
+
+(crontab -u alex -l 2>/dev/null; \
+  echo "*/15 * * * * $STACK_DIR/backup/www-sync.sh >> $STACK_DIR/backup/backup.log 2>&1") \
+  | crontab -u alex -
+log "www Sync-Cron eingerichtet (alle 15 Min — nur bei Änderungen)"
 
 # Firewall
 ufw default deny incoming
