@@ -1,18 +1,16 @@
 #!/bin/bash
 set -e
 # ─────────────────────────────────────────────────────────────
-#  Ugly Stack — Bootstrap Script
-#  Frischer Ubuntu 24.04 VPS — als root ausführen
-#  curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
-#  chmod +x bootstrap.sh && ./bootstrap.sh
+# Ugly Stack — Bootstrap Script
+# Frischer Ubuntu 24.04 VPS — als root ausführen
+# curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
+# chmod +x bootstrap.sh && ./bootstrap.sh
 # ─────────────────────────────────────────────────────────────
-
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
-
 log()  { echo -e "${GREEN}[✓]${NC} $1"; }
 info() { echo -e "${BLUE}[→]${NC} $1"; }
 warn() { echo -e "${YELLOW}[!]${NC} $1"; }
@@ -21,8 +19,8 @@ ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║        Ugly Stack — Bootstrap            ║"
-echo "║        beautymolt.com                    ║"
+echo "║ Ugly Stack — Bootstrap                   ║"
+echo "║ beautymolt.com                           ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -69,14 +67,12 @@ unset BW_MASTER
 # GPG Passwort holen
 BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
   --session "$BW_SESSION" | jq -r '.login.password')
-
 [ -z "$BACKUP_GPG_PASSWORD" ] || [ "$BACKUP_GPG_PASSWORD" = "null" ] \
   && fail "BACKUP_GPG_PASSWORD nicht in Bitwarden gefunden"
 
 # GitHub Token holen
 GITHUB_TOKEN=$(bw get item "GITHUB_TOKEN" \
   --session "$BW_SESSION" | jq -r '.login.password')
-
 [ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "null" ] \
   && fail "GITHUB_TOKEN nicht in Bitwarden gefunden"
 
@@ -98,6 +94,7 @@ else
 fi
 
 usermod -aG sudo alex
+usermod -aG docker alex
 
 echo ""
 ask "Passwort für User 'alex':"
@@ -109,7 +106,7 @@ while true; do
 done
 echo "alex:$ALEX_PW" | chpasswd
 unset ALEX_PW ALEX_PW2
-log "User 'alex' bereit (sudo)"
+log "User 'alex' bereit (sudo, docker)"
 
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 3 — SYSTEM + TOOLS + DOCKER
@@ -132,7 +129,6 @@ else
   log "Docker installiert"
 fi
 
-usermod -aG docker alex
 log "System bereit"
 
 # ─────────────────────────────────────────────────────────────
@@ -157,7 +153,6 @@ gpg --batch --yes \
 
 # BACKUP_GPG_PASSWORD in .env eintragen
 echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> .env
-
 log ".env entschlüsselt"
 
 # Verzeichnisse anlegen
@@ -172,13 +167,10 @@ grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
   || echo "backup/.www-checksum" >> "$STACK_DIR/.gitignore"
 log ".gitignore aktualisiert"
 
-# n8n läuft als User node (UID 1000) — Volume muss entsprechend gehören
-chown -R 1000:1000 "$STACK_DIR/n8n-data"
-
 # openclaw.json vorerstellen — nur wenn noch nicht vorhanden (z.B. kein Backup)
 source "$STACK_DIR/.env" 2>/dev/null || true
 if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
-cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
+  cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
 {
   "gateway": {
     "mode": "local",
@@ -200,8 +192,7 @@ cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
   }
 }
 CLAWCONFIG
-chown -R 1000:1000 "$STACK_DIR/openclaw-data"
-log "openclaw.json vorbereitet (bind: lan)"
+  log "openclaw.json vorbereitet (bind: lan)"
 else
   log "openclaw.json aus Backup wiederhergestellt — wird nicht überschrieben"
 fi
@@ -219,7 +210,10 @@ endpoint = ${CF_R2_ENDPOINT}
 acl = private
 RCLONE
 
+# Ownership setzen: alex für git/allgemein, Container-User (UID 1000) für ihre Volumes
 chown -R alex:alex "$STACK_DIR"
+chown -R 1000:1000 "$STACK_DIR/openclaw-data"
+chown -R 1000:1000 "$STACK_DIR/n8n-data"
 
 # Git Remote mit Token konfigurieren — als alex
 sudo -u alex git -C "$STACK_DIR" remote set-url origin \
@@ -313,9 +307,10 @@ docker compose up -d
 sleep 30
 docker compose ps
 
-# FIX 1: openclaw-data Ownership für Backups — alex muss lesen können
-chown -R alex:alex "$STACK_DIR/openclaw-data"
-log "openclaw-data Ownership auf alex gesetzt (für Backups)"
+# openclaw-data und n8n-data müssen 1000:1000 gehören (Container laufen als node/UID 1000)
+chown -R 1000:1000 "$STACK_DIR/openclaw-data"
+chown -R 1000:1000 "$STACK_DIR/n8n-data"
+log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
 
 # OpenClaw Token aus Config lesen und .env aktualisieren
 NEW_TOKEN=$(docker exec openclaw cat /home/node/.openclaw/openclaw.json 2>/dev/null \
@@ -359,7 +354,7 @@ if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   log "n8n Workflows importiert"
 fi
 
-# FIX 2: SearXNG JSON API aktivieren
+# FIX: SearXNG JSON API aktivieren
 if [ -f "$STACK_DIR/searxng-data/settings.yml" ]; then
   if ! grep -q "^\s*- json" "$STACK_DIR/searxng-data/settings.yml"; then
     sed -i 's/^\s*- html$/  - html\n  - json/' "$STACK_DIR/searxng-data/settings.yml"
@@ -397,21 +392,24 @@ log "Firewall konfiguriert"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
-echo "║      Installation abgeschlossen!         ║"
+echo "║ Installation abgeschlossen!              ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
-echo "  Stack:    $STACK_DIR"
-echo "  User:     alex (sudo)"
-echo "  Backup:   täglich 03:00 → R2"
-echo "  .env:     alle 30 Min → GitHub"
+echo "  Stack: $STACK_DIR"
+echo "  User:  alex (sudo, docker)"
+echo "  Backup: täglich 03:00 → R2"
+echo "  .env:   alle 30 Min → GitHub"
 echo ""
 echo "  Services:"
-echo "    claw.beautymolt.com    → OpenClaw"
-echo "    search.beautymolt.com  → SearXNG"
-echo "    n8n.beautymolt.com     → n8n"
-echo "    www.beautymolt.com     → nginx"
-echo "    mail.beautymolt.com    → Roundcube"
+echo "    claw.beautymolt.com   → OpenClaw"
+echo "    search.beautymolt.com → SearXNG"
+echo "    n8n.beautymolt.com    → n8n"
+echo "    www.beautymolt.com    → nginx"
+echo "    mail.beautymolt.com   → Roundcube"
 echo ""
 echo "  WICHTIG: OpenClaw Telegram Onboarding noch nötig!"
 echo "  docker exec -it openclaw node /app/dist/index.js onboard"
+echo ""
+echo "  HINWEIS: Neu einloggen damit docker-Gruppe aktiv wird:"
+echo "  su - alex"
 echo ""
