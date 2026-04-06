@@ -160,6 +160,32 @@ mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 # n8n läuft als User node (UID 1000) — Volume muss entsprechend gehören
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 
+# openclaw.json vorerstellen — bind lan + controlUi
+source "$STACK_DIR/.env" 2>/dev/null || true
+cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    },
+    "trustedProxies": ["10.0.0.0/8", "172.16.0.0/12"],
+    "controlUi": {
+      "allowedOrigins": [
+        "https://claw.beautymolt.com",
+        "https://claw.beautymolt.com/"
+      ],
+      "allowInsecureAuth": true,
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    }
+  }
+}
+CLAWCONFIG
+chown -R 1000:1000 "$STACK_DIR/openclaw-data"
+log "openclaw.json vorbereitet (bind: lan)"
+
 # rclone konfigurieren
 source "$STACK_DIR/.env"
 mkdir -p "$STACK_DIR/rclone"
