@@ -37,6 +37,10 @@ REPO_URL="https://github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 info "Schritt 1/7 — Bitwarden Login..."
 echo ""
 
+# Basis-Tools installieren
+apt-get update -qq
+apt-get install -y -qq curl unzip jq gpg git
+
 # Bitwarden CLI installieren
 if ! command -v bw &>/dev/null; then
   info "Bitwarden CLI installieren..."
