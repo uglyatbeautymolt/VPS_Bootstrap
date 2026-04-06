@@ -1,0 +1,7 @@
+.env
+*.log
+openclaw-data/
+n8n-data/
+searxng-data/
+www/
+rclone.conf

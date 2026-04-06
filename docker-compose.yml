@@ -1,0 +1,78 @@
+services:
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - ugly-net
+    depends_on:
+      - nginx
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./www:/var/www/html:ro
+    networks:
+      - ugly-net
+
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: ugly-agent
+    restart: unless-stopped
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - SEARXNG_URL=http://searxng:8080
+      - TZ=${TZ}
+    volumes:
+      - ./openclaw-data:/root/.openclaw
+    networks:
+      - ugly-net
+    depends_on:
+      - searxng
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    volumes:
+      - ./searxng-data:/etc/searxng
+    environment:
+      - SEARXNG_BASE_URL=https://search.beautymolt.com
+      - TZ=${TZ}
+    networks:
+      - ugly-net
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - WEBHOOK_URL=https://n8n.beautymolt.com
+      - N8N_EMAIL_MODE=smtp
+      - N8N_SMTP_HOST=smtp-relay.brevo.com
+      - N8N_SMTP_PORT=587
+      - N8N_SMTP_USER=${BREVO_SMTP_USER}
+      - N8N_SMTP_PASS=${BREVO_SMTP_API_KEY}
+      - N8N_SMTP_SENDER=${BREVO_SMTP_USER}
+      - TZ=${TZ}
+    volumes:
+      - ./n8n-data:/home/node/.n8n
+    networks:
+      - ugly-net
+
+networks:
+  ugly-net:
+    driver: bridge
