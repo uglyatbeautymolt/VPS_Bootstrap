@@ -24,15 +24,16 @@ chmod +x bootstrap.sh
 ```
 
 Das Script fragt nur nach:
-1. Cloudflare API Token
-2. Passwort für User `alex`
+1. Bitwarden E-Mail
+2. Bitwarden Master-Passwort
+3. Passwort für User `alex`
 
-Alles andere kommt automatisch aus Cloudflare Secrets Store.
+Alles andere kommt automatisch aus der verschlüsselten `.env.gpg` im Repo.
 Neuestes Backup wird automatisch von Cloudflare R2 wiederhergestellt.
 
 ## Voraussetzungen
 
-Folgende Secrets müssen in **Cloudflare Secrets Store** hinterlegt sein:
+Folgende Secrets müssen in der **`.env`** hinterlegt sein (verschlüsselt als `.env.gpg` im Repo):
 
 | Secret | Beschreibung |
 |--------|-------------|
@@ -43,7 +44,7 @@ Folgende Secrets müssen in **Cloudflare Secrets Store** hinterlegt sein:
 | `N8N_BASIC_AUTH_USER` | n8n Benutzername |
 | `N8N_BASIC_AUTH_PASSWORD` | n8n Passwort |
 | `N8N_ENCRYPTION_KEY` | n8n Encryption Key (32 Zeichen) |
-| `ZOHO_SMTP_USER` | ugly@beautymolt.com |
+| `ZOHO_SMTP_USER` | Zoho Mail Login E-Mail |
 | `ZOHO_SMTP_PASSWORD` | Zoho SMTP Passwort |
 | `BREVO_SMTP_USER` | Brevo Login E-Mail |
 | `BREVO_SMTP_API_KEY` | Brevo API Key (Versand) |
