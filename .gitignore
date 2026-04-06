@@ -5,3 +5,6 @@ n8n-data/
 searxng-data/
 www/
 rclone.conf
+backup/www-sync.sh
+backup/.www-checksum
+roundcube-data/
