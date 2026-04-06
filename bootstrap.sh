@@ -32,7 +32,7 @@ STACK_DIR="/home/alex/ugly-stack"
 REPO_URL="https://github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 1 — BITWARDEN LOGIN + GPG PASSWORT HOLEN
+# SCHRITT 1 — BITWARDEN LOGIN + SECRETS HOLEN
 # ─────────────────────────────────────────────────────────────
 info "Schritt 1/7 — Bitwarden Login..."
 echo ""
@@ -157,7 +157,6 @@ gpg --batch --yes \
 
 # BACKUP_GPG_PASSWORD in .env eintragen
 echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> .env
-unset BACKUP_GPG_PASSWORD
 
 log ".env entschlüsselt"
 
@@ -246,59 +245,45 @@ if [ -n "$LATEST" ]; then
   rclone copy "r2:${CF_R2_BUCKET}/backups/$LATEST" /tmp/ \
     --config "$STACK_DIR/rclone/rclone.conf"
 
+  STAGING="/tmp/ugly-restore-staging"
+  rm -rf "$STAGING" && mkdir -p "$STAGING"
+
   gpg --batch --yes \
     --passphrase "$BACKUP_GPG_PASSWORD" \
     --decrypt "/tmp/$LATEST" \
-    | tar -xz -C "$STACK_DIR/"
+    | tar -xz -C "$STAGING/"
 
   rm -f "/tmp/$LATEST"
-  log "Backup wiederhergestellt"
+
+  # n8n Workflows + Credentials
+  mkdir -p "$STACK_DIR/n8n-data"
+  [ -f "$STAGING/n8n-data/workflows-backup.json" ] && \
+    cp "$STAGING/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/"
+  [ -f "$STAGING/n8n-data/credentials-backup.json" ] && \
+    cp "$STAGING/n8n-data/credentials-backup.json" "$STACK_DIR/n8n-data/"
+  chown -R 1000:1000 "$STACK_DIR/n8n-data"
+
+  # openclaw-data
+  if ls "$STAGING/openclaw-data/"*.tar.gz &>/dev/null; then
+    mkdir -p "$STACK_DIR/openclaw-data"
+    tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
+    chown -R 1000:1000 "$STACK_DIR/openclaw-data"
+  fi
+
+  # nginx
+  mkdir -p "$STACK_DIR/nginx/conf.d"
+  [ -d "$STAGING/nginx/conf.d" ] && \
+    cp -r "$STAGING/nginx/conf.d/." "$STACK_DIR/nginx/conf.d/"
+
+  # www
+  mkdir -p "$STACK_DIR/www"
+  [ -d "$STAGING/www" ] && \
+    cp -r "$STAGING/www/." "$STACK_DIR/www/"
+
+  rm -rf "$STAGING"
+  log "Backup wiederhergestellt aus: $LATEST"
 else
   warn "Kein Backup gefunden — frischer Start"
-fi
-
-# n8n Credentials + Workflows wiederherstellen
-N8N_CREDS="r2:${CF_R2_BUCKET}/n8n/credentials-backup.json.gpg"
-N8N_FLOWS="r2:${CF_R2_BUCKET}/n8n/workflows-backup.json.gpg"
-
-if rclone ls "$N8N_CREDS" --config "$STACK_DIR/rclone/rclone.conf" &>/dev/null; then
-  info "n8n Backup wiederherstellen..."
-  rclone copy "$N8N_CREDS" /tmp/ --config "$STACK_DIR/rclone/rclone.conf"
-  rclone copy "$N8N_FLOWS" /tmp/ --config "$STACK_DIR/rclone/rclone.conf"
-
-  gpg --batch --yes --passphrase "$BACKUP_GPG_PASSWORD" \
-    --decrypt /tmp/credentials-backup.json.gpg \
-    > /tmp/credentials-backup.json
-  gpg --batch --yes --passphrase "$BACKUP_GPG_PASSWORD" \
-    --decrypt /tmp/workflows-backup.json.gpg \
-    > /tmp/workflows-backup.json
-
-  mkdir -p "$STACK_DIR/n8n-data"
-  cp /tmp/credentials-backup.json "$STACK_DIR/n8n-data/"
-  cp /tmp/workflows-backup.json "$STACK_DIR/n8n-data/"
-  rm -f /tmp/credentials-backup.json* /tmp/workflows-backup.json*
-  log "n8n Backup bereit"
-fi
-
-# www Webseite wiederherstellen
-WWW_LATEST=$(rclone ls "r2:${CF_R2_BUCKET}/www/" \
-  --config "$STACK_DIR/rclone/rclone.conf" 2>/dev/null \
-  | sort | tail -1 | awk '{print $2}')
-
-if [ -n "$WWW_LATEST" ]; then
-  info "www Backup wiederherstellen: $WWW_LATEST"
-  rclone copy "r2:${CF_R2_BUCKET}/www/$WWW_LATEST" /tmp/ \
-    --config "$STACK_DIR/rclone/rclone.conf"
-
-  gpg --batch --yes \
-    --passphrase "$BACKUP_GPG_PASSWORD" \
-    --decrypt "/tmp/$WWW_LATEST" \
-    | tar -xz -C "$STACK_DIR/www/"
-
-  rm -f "/tmp/$WWW_LATEST"
-  log "www Webseite wiederhergestellt → $STACK_DIR/www/"
-else
-  warn "Kein www Backup gefunden — leeres www Verzeichnis"
 fi
 
 # Token aus openclaw.json Backup lesen und .env synchronisieren
@@ -329,10 +314,10 @@ sleep 30
 docker compose ps
 
 # OpenClaw Token aus Config lesen und .env aktualisieren
-NEW_TOKEN=$(docker exec openclaw cat /home/node/.openclaw/openclaw.json 2>/dev/null   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('gateway',{}).get('auth',{}).get('token',''))" 2>/dev/null)
+NEW_TOKEN=$(docker exec openclaw cat /home/node/.openclaw/openclaw.json 2>/dev/null \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('gateway',{}).get('auth',{}).get('token',''))" 2>/dev/null)
 if [ -n "$NEW_TOKEN" ] && [ "$NEW_TOKEN" != "null" ]; then
   sed -i "s/OPENCLAW_GATEWAY_TOKEN=.*/OPENCLAW_GATEWAY_TOKEN=$NEW_TOKEN/" "$STACK_DIR/.env"
-  # openclaw.json mit korrektem Token neu schreiben
   cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
 {
   "gateway": {
@@ -375,7 +360,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
-# Backup-Cron
+# Backup-Cron (täglich 03:00 — alles in einem Archiv zu R2)
 chmod +x "$STACK_DIR/backup/backup-master.sh"
 (crontab -u alex -l 2>/dev/null; \
   echo "0 3 * * * $STACK_DIR/backup/backup-master.sh >> $STACK_DIR/backup/backup.log 2>&1") \
@@ -387,54 +372,6 @@ log "Backup-Cron eingerichtet (täglich 03:00)"
   echo "*/30 * * * * cd $STACK_DIR && gpg --batch --yes --passphrase \"\$BACKUP_GPG_PASSWORD\" --symmetric --cipher-algo AES256 -o .env.gpg .env && git add .env.gpg && git diff --cached --quiet || git commit -m 'update: .env sync' && git push origin main") \
   | crontab -u alex -
 log ".env Sync-Cron eingerichtet (alle 30 Min)"
-
-# www Backup-Cron — prüft auf Änderungen und lädt zu R2 hoch
-cat > "$STACK_DIR/backup/www-sync.sh" << 'WWWSYNC'
-#!/bin/bash
-# www Sync zu R2 — nur wenn Änderungen vorhanden
-STACK_DIR="/home/alex/ugly-stack"
-WWW_DIR="$STACK_DIR/www"
-CHECKSUM_FILE="$STACK_DIR/backup/.www-checksum"
-
-source "$STACK_DIR/.env"
-
-# Aktuellen Checksum berechnen
-CURRENT=$(find "$WWW_DIR" -type f -exec md5sum {} \; | sort | md5sum | cut -d' ' -f1)
-
-# Mit letztem Checksum vergleichen
-LAST=$(cat "$CHECKSUM_FILE" 2>/dev/null || echo "")
-
-if [ "$CURRENT" = "$LAST" ]; then
-  exit 0  # Keine Änderungen
-fi
-
-# Änderungen gefunden — Backup erstellen
-DATE=$(date +%Y%m%d_%H%M%S)
-tar -czf /tmp/www-backup-${DATE}.tar.gz -C "$WWW_DIR" .
-
-gpg --batch --yes \
-  --passphrase "$BACKUP_GPG_PASSWORD" \
-  --symmetric --cipher-algo AES256 \
-  /tmp/www-backup-${DATE}.tar.gz
-
-rclone copy /tmp/www-backup-${DATE}.tar.gz.gpg \
-  r2:${CF_R2_BUCKET}/www/ \
-  --config "$STACK_DIR/rclone/rclone.conf"
-
-rm -f /tmp/www-backup-${DATE}.tar.gz \
-      /tmp/www-backup-${DATE}.tar.gz.gpg
-
-# Checksum aktualisieren
-echo "$CURRENT" > "$CHECKSUM_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] www Backup → R2: www-backup-${DATE}.tar.gz.gpg"
-WWWSYNC
-
-chmod +x "$STACK_DIR/backup/www-sync.sh"
-
-(crontab -u alex -l 2>/dev/null; \
-  echo "*/15 * * * * $STACK_DIR/backup/www-sync.sh >> $STACK_DIR/backup/backup.log 2>&1") \
-  | crontab -u alex -
-log "www Sync-Cron eingerichtet (alle 15 Min — nur bei Änderungen)"
 
 # Firewall
 ufw default deny incoming
@@ -458,4 +395,5 @@ echo "    claw.beautymolt.com    → OpenClaw"
 echo "    search.beautymolt.com  → SearXNG"
 echo "    n8n.beautymolt.com     → n8n"
 echo "    www.beautymolt.com     → nginx"
+echo "    mail.beautymolt.com    → Roundcube"
 echo ""
