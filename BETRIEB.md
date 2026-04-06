@@ -17,29 +17,35 @@
 ### Vorbereitung
 Bevor du `bootstrap.sh` startest, sammle folgende Informationen:
 
-| Was | Wo finden |
-|-----|-----------|
-| Cloudflare API Token | Cloudflare Dashboard → My Profile → API Tokens |
-| Cloudflare Tunnel Token | Cloudflare Dashboard → Zero Trust → Tunnels |
-| OpenRouter API Key | openrouter.ai → Keys |
-| Telegram Bot Token | @BotFather auf Telegram |
-| OpenClaw Gateway Token | Selbst wählen (langer zufälliger String) |
-| n8n Passwort | Selbst wählen |
-| n8n Encryption Key | 32 zufällige Zeichen: `openssl rand -hex 16` |
-| Zoho SMTP Passwort | Zoho Mail → Einstellungen → SMTP |
-| Backup GPG Passwort | Selbst wählen — sicher aufbewahren! |
-| R2 Access Key + Secret | Cloudflare Dashboard → R2 → Manage API Tokens |
-| R2 Bucket Name | Selbst wählen z.B. `ugly-backups` |
-| R2 Endpoint | `https://<account-id>.r2.cloudflarestorage.com` |
+| Secret | Wo finden |
+|--------|-----------|
+| `CLOUDFLARE_TUNNEL_TOKEN` | Cloudflare → Zero Trust → Tunnels → beautymoltTunnel |
+| `OPENROUTER_API_KEY` | openrouter.ai → Keys |
+| `TELEGRAM_BOT_TOKEN` | @BotFather auf Telegram — bestehenden weiterverwenden |
+| `OPENCLAW_GATEWAY_TOKEN` | Selbst wählen — bestehenden weiterverwenden |
+| `N8N_BASIC_AUTH_USER` | Selbst wählen |
+| `N8N_BASIC_AUTH_PASSWORD` | Selbst wählen |
+| `N8N_ENCRYPTION_KEY` | `openssl rand -hex 16` — bestehenden beibehalten! |
+| `ZOHO_SMTP_USER` | ugly@beautymolt.com |
+| `ZOHO_SMTP_PASSWORD` | Zoho Mail → Einstellungen → SMTP |
+| `BREVO_SMTP_USER` | Brevo Login E-Mail (alex@alexstuder.ch) |
+| `BREVO_SMTP_API_KEY` | Brevo → SMTP & API → API Keys |
+| `BACKUP_GPG_PASSWORD` | In Bitwarden — wird automatisch geholt |
+| `CF_R2_ACCESS_KEY` | Cloudflare → R2 → Manage API Tokens |
+| `CF_R2_SECRET_KEY` | Cloudflare → R2 → Manage API Tokens |
+| `CF_R2_BUCKET` | `ugly-vps-backup` |
+| `CF_R2_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
 
-### Secrets in Cloudflare Secrets Store hinterlegen
-Bevor du bootstrap.sh startest, trage alle bekannten Secrets in Cloudflare ein:
-- Cloudflare Dashboard → Workers & Pages → Secrets Store
-- Pro Secret: Name + Wert eintragen
+### Vorbereitung .env
 
-**Nicht alle Secrets müssen vor der ersten Installation bereit sein.**
-Das bootstrap.sh Script fragt interaktiv nach fehlenden Werten.
-Platzhalter sind erlaubt — du kannst Secrets später aktualisieren.
+Die `.env` liegt verschlüsselt als `.env.gpg` im GitHub Repo.
+`BACKUP_GPG_PASSWORD` liegt in **Bitwarden** — wird beim bootstrap automatisch geholt.
+
+**bootstrap.sh fragt nur nach:**
+1. Bitwarden E-Mail
+2. Bitwarden Master-Passwort
+
+Alles andere kommt automatisch aus der entschlüsselten `.env.gpg`.
 
 ### Installation starten
 ```bash
@@ -56,10 +62,11 @@ chmod +x bootstrap.sh
 ```
 
 Das Script fragt nach:
-1. Cloudflare API Token
-2. Passwort für User `alex`
+1. Bitwarden E-Mail
+2. Bitwarden Master-Passwort
+3. Passwort für User `alex`
 
-Alles andere kommt automatisch aus Cloudflare oder wird interaktiv abgefragt.
+Alles andere kommt automatisch aus der verschlüsselten `.env.gpg`.
 
 ### Nach der Installation prüfen
 ```bash
@@ -121,6 +128,7 @@ docker compose up -d --force-recreate ugly-agent
 | N8N_* | n8n |
 | CLOUDFLARE_TUNNEL_TOKEN | cloudflared |
 | ZOHO_SMTP_* | n8n |
+| BREVO_SMTP_* | n8n |
 
 ### Token erneuern — Schritt für Schritt
 1. Neuen Token beim Anbieter generieren
