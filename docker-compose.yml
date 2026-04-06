@@ -77,6 +77,24 @@ services:
     networks:
       - ugly-net
 
+  roundcube:
+    image: roundcube/roundcubemail:latest
+    container_name: roundcube
+    restart: unless-stopped
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://imap.zoho.eu
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      - ROUNDCUBEMAIL_SMTP_SERVER=ssl://smtp.zoho.eu
+      - ROUNDCUBEMAIL_SMTP_PORT=465
+      - ROUNDCUBEMAIL_DB_TYPE=sqlite
+      - ROUNDCUBEMAIL_SKIN=elastic
+      - ROUNDCUBEMAIL_DEFAULT_USER=${ZOHO_SMTP_USER}
+    volumes:
+      - ./roundcube-data:/var/roundcube/db
+      - ./roundcube-temp:/tmp/roundcube-temp
+    networks:
+      - ugly-net
+
 networks:
   ugly-net:
     driver: bridge
