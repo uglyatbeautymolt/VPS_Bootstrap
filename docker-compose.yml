@@ -30,6 +30,7 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+      - GATEWAY_BIND=0.0.0.0
       - SEARXNG_URL=http://searxng:8080
       - TZ=${TZ}
     volumes:
