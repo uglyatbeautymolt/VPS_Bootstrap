@@ -280,8 +280,38 @@ cd "$STACK_DIR"
 docker compose pull
 docker compose up -d
 
-sleep 20
+sleep 30
 docker compose ps
+
+# OpenClaw Token aus Config lesen und .env aktualisieren
+NEW_TOKEN=$(docker exec openclaw cat /home/node/.openclaw/openclaw.json 2>/dev/null   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('gateway',{}).get('auth',{}).get('token',''))" 2>/dev/null)
+if [ -n "$NEW_TOKEN" ] && [ "$NEW_TOKEN" != "null" ]; then
+  sed -i "s/OPENCLAW_GATEWAY_TOKEN=.*/OPENCLAW_GATEWAY_TOKEN=$NEW_TOKEN/" "$STACK_DIR/.env"
+  # openclaw.json mit korrektem Token neu schreiben
+  cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "auth": {
+      "mode": "token",
+      "token": "$NEW_TOKEN"
+    },
+    "trustedProxies": ["10.0.0.0/8", "172.16.0.0/12"],
+    "controlUi": {
+      "allowedOrigins": [
+        "https://claw.beautymolt.com",
+        "https://claw.beautymolt.com/"
+      ],
+      "allowInsecureAuth": true,
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    }
+  }
+}
+CLAWCONFIG
+  chown 1000:1000 "$STACK_DIR/openclaw-data/openclaw.json"
+  log "OpenClaw Gateway Token in .env aktualisiert"
+fi
 
 # n8n Workflows + Credentials importieren
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
