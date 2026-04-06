@@ -454,16 +454,12 @@ docker compose logs --tail=30
 
 Cloudflare Dashboard → Zero Trust → Networks → Tunnels → beautymoltTunnel → Edit → Routes
 
-Alle Routes auf `http://localhost:80` ändern:
-
-| Subdomain | Alt | Neu |
-|-----------|-----|-----|
-| `claw.beautymolt.com` | `http://localhost:48116` | `http://localhost:80` |
-| `www.beautymolt.com` | `http://localhost:80` | bleibt gleich ✓ |
-| `search.beautymolt.com` | `http://localhost:8888` | `http://localhost:80` |
-| `n8n.beautymolt.com` | `http://localhost:5678` | `http://localhost:80` |
-| `mail.beautymolt.com` | `http://localhost:8080` | `http://localhost:80` |
-| `dashboard.beautymolt.com` | löschen | — |
+| Subdomain | Service |
+|-----------|---------|
+| `claw.beautymolt.com` | `http://nginx:80` |
+| `www.beautymolt.com` | `http://nginx:80` |
+| `search.beautymolt.com` | `http://nginx:80` |
+| `n8n.beautymolt.com` | `http://nginx:80` |
 
 ### Schritt 5 — OpenClaw Onboarding
 
