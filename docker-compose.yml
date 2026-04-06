@@ -26,6 +26,7 @@ services:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw
     restart: unless-stopped
+    command: node /app/dist/index.js gateway --allow-unconfigured --bind lan
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
