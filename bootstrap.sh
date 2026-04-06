@@ -29,29 +29,55 @@ echo ""
 [ "$EUID" -ne 0 ] && fail "Bitte als root ausführen"
 
 STACK_DIR="/home/alex/ugly-stack"
-CF_API="https://api.cloudflare.com/client/v4"
+REPO_URL="https://github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 1 — CLOUDFLARE API TOKEN
+# SCHRITT 1 — BITWARDEN LOGIN + GPG PASSWORT HOLEN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 1/6 — Cloudflare API Token..."
+info "Schritt 1/7 — Bitwarden Login..."
 echo ""
-ask "Cloudflare API Token (Secrets Store + R2 Rechte):"
-read -s -p "  > " CF_TOKEN; echo ""
 
-CF_ACCOUNT=$(curl -s "$CF_API/accounts" \
-  -H "Authorization: Bearer $CF_TOKEN" \
-  | jq -r '.result[0].id' 2>/dev/null)
+# Bitwarden CLI installieren
+if ! command -v bw &>/dev/null; then
+  info "Bitwarden CLI installieren..."
+  curl -fsSL "https://vault.bitwarden.com/download/?app=cli&platform=linux" \
+    -o /tmp/bw.zip
+  unzip -q /tmp/bw.zip -d /tmp/bw
+  mv /tmp/bw/bw /usr/local/bin/bw
+  chmod +x /usr/local/bin/bw
+  rm -rf /tmp/bw /tmp/bw.zip
+  log "Bitwarden CLI installiert"
+fi
 
-[ -z "$CF_ACCOUNT" ] || [ "$CF_ACCOUNT" = "null" ] \
-  && fail "Cloudflare Token ungültig"
+ask "Bitwarden E-Mail:"
+read -p "  > " BW_EMAIL
 
-log "Cloudflare Account: $CF_ACCOUNT"
+ask "Bitwarden Master-Passwort:"
+read -s -p "  > " BW_MASTER; echo ""
+
+# Login
+BW_SESSION=$(bw login "$BW_EMAIL" "$BW_MASTER" --raw 2>/dev/null \
+  || bw unlock "$BW_MASTER" --raw 2>/dev/null) \
+  || fail "Bitwarden Login fehlgeschlagen"
+
+unset BW_MASTER
+
+# GPG Passwort holen
+BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
+  --session "$BW_SESSION" | jq -r '.login.password')
+
+[ -z "$BACKUP_GPG_PASSWORD" ] || [ "$BACKUP_GPG_PASSWORD" = "null" ] \
+  && fail "BACKUP_GPG_PASSWORD nicht in Bitwarden gefunden"
+
+# Bitwarden sperren
+bw lock --session "$BW_SESSION" &>/dev/null
+unset BW_SESSION BW_EMAIL
+log "GPG Passwort aus Bitwarden geholt — Bitwarden gesperrt"
 
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 2 — USER ALEX ANLEGEN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 2/6 — User 'alex' anlegen..."
+info "Schritt 2/7 — User 'alex' anlegen..."
 
 if id "alex" &>/dev/null; then
   warn "User 'alex' existiert bereits"
@@ -61,7 +87,6 @@ else
 fi
 
 usermod -aG sudo alex
-usermod -aG docker alex 2>/dev/null || true
 
 echo ""
 ask "Passwort für User 'alex':"
@@ -73,19 +98,20 @@ while true; do
 done
 echo "alex:$ALEX_PW" | chpasswd
 unset ALEX_PW ALEX_PW2
-log "User 'alex' bereit (sudo + docker)"
+log "User 'alex' bereit (sudo)"
 
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 3 — SYSTEM + TOOLS + DOCKER
 # ─────────────────────────────────────────────────────────────
-info "Schritt 3/6 — System + Docker installieren..."
+info "Schritt 3/7 — System + Docker installieren..."
 
 apt-get update -qq
 apt-get upgrade -y -qq
 apt-get install -y -qq \
-  curl git unzip jq ca-certificates gnupg \
+  curl git unzip jq gpg \
+  ca-certificates gnupg \
   lsb-release apt-transport-https \
-  software-properties-common rclone gpg
+  software-properties-common rclone
 
 if command -v docker &>/dev/null; then
   warn "Docker bereits installiert"
@@ -99,74 +125,35 @@ usermod -aG docker alex
 log "System bereit"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 4 — SECRETS AUS CLOUDFLARE HOLEN → .env AUFBAUEN
+# SCHRITT 4 — REPO CLONEN + .env ENTSCHLÜSSELN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 4/6 — Secrets aus Cloudflare Secrets Store holen..."
-
-get_secret() {
-  curl -s "$CF_API/accounts/$CF_ACCOUNT/secrets/$1" \
-    -H "Authorization: Bearer $CF_TOKEN" \
-    | jq -r '.result.value // empty' 2>/dev/null
-}
-
-SECRETS=(
-  CLOUDFLARE_TUNNEL_TOKEN
-  OPENROUTER_API_KEY
-  TELEGRAM_BOT_TOKEN
-  OPENCLAW_GATEWAY_TOKEN
-  N8N_BASIC_AUTH_USER
-  N8N_BASIC_AUTH_PASSWORD
-  N8N_ENCRYPTION_KEY
-  ZOHO_SMTP_USER
-  ZOHO_SMTP_PASSWORD
-  BREVO_SMTP_USER
-  BREVO_SMTP_API_KEY
-  BACKUP_GPG_PASSWORD
-  CF_R2_ACCESS_KEY
-  CF_R2_SECRET_KEY
-  CF_R2_BUCKET
-  CF_R2_ENDPOINT
-)
-
-echo "TZ=Europe/Zurich" > /tmp/ugly.env
-echo "CF_TOKEN=${CF_TOKEN}" >> /tmp/ugly.env
-echo "CF_ACCOUNT=${CF_ACCOUNT}" >> /tmp/ugly.env
-
-for SECRET in "${SECRETS[@]}"; do
-  VALUE=$(get_secret "$SECRET")
-  if [ -n "$VALUE" ]; then
-    echo "${SECRET}=${VALUE}" >> /tmp/ugly.env
-    log "✓ $SECRET"
-  else
-    warn "$SECRET fehlt — bitte eingeben:"
-    read -s -p "  > " VALUE; echo ""
-    echo "${SECRET}=${VALUE}" >> /tmp/ugly.env
-  fi
-  unset VALUE
-done
-
-log ".env aufgebaut"
-
-# ─────────────────────────────────────────────────────────────
-# SCHRITT 5 — REPO CLONEN
-# ─────────────────────────────────────────────────────────────
-info "Schritt 5/6 — Repository clonen..."
+info "Schritt 4/7 — Repository clonen..."
 
 if [ -d "$STACK_DIR" ]; then
   warn "$STACK_DIR existiert — wird gesichert"
   mv "$STACK_DIR" "${STACK_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
 fi
 
-git clone https://github.com/uglyatbeautymolt/VPS_Bootstrap "$STACK_DIR"
+git clone "$REPO_URL" "$STACK_DIR"
+cd "$STACK_DIR"
 
-# .env ins Stack-Verzeichnis
-cp /tmp/ugly.env "$STACK_DIR/.env"
-rm -f /tmp/ugly.env
+# .env.gpg entschlüsseln
+[ ! -f ".env.gpg" ] && fail ".env.gpg nicht im Repository gefunden"
 
-# Verzeichnisse anlegen (Volumes)
+gpg --batch --yes \
+  --passphrase "$BACKUP_GPG_PASSWORD" \
+  --decrypt .env.gpg > .env
+
+# BACKUP_GPG_PASSWORD in .env eintragen
+echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> .env
+unset BACKUP_GPG_PASSWORD
+
+log ".env entschlüsselt"
+
+# Verzeichnisse anlegen
 mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 
-# rclone für R2 konfigurieren
+# rclone konfigurieren
 source "$STACK_DIR/.env"
 mkdir -p "$STACK_DIR/rclone"
 cat > "$STACK_DIR/rclone/rclone.conf" << RCLONE
@@ -180,14 +167,13 @@ acl = private
 RCLONE
 
 chown -R alex:alex "$STACK_DIR"
-log "Repository geclont"
+log "Repository geclont und konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 6 — BACKUP WIEDERHERSTELLEN → STACK STARTEN
+# SCHRITT 5 — BACKUP VON R2 WIEDERHERSTELLEN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 6/6 — Backup wiederherstellen und Stack starten..."
+info "Schritt 5/7 — Backup von R2 wiederherstellen..."
 
-# Neuestes Backup von R2 holen
 LATEST=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
   --config "$STACK_DIR/rclone/rclone.conf" 2>/dev/null \
   | sort | tail -1 | awk '{print $2}')
@@ -197,25 +183,79 @@ if [ -n "$LATEST" ]; then
   rclone copy "r2:${CF_R2_BUCKET}/backups/$LATEST" /tmp/ \
     --config "$STACK_DIR/rclone/rclone.conf"
 
-  # Entschlüsseln + direkt in Stack-Verzeichnis entpacken
-  # Backup-Struktur: openclaw-data/, n8n-data/, nginx/, www/
-  echo "$BACKUP_GPG_PASSWORD" | gpg --batch --yes --passphrase-fd 0 \
+  gpg --batch --yes \
+    --passphrase "$BACKUP_GPG_PASSWORD" \
     --decrypt "/tmp/$LATEST" \
     | tar -xz -C "$STACK_DIR/"
 
   rm -f "/tmp/$LATEST"
-  log "Backup wiederhergestellt — Daten liegen in Volumes"
+  log "Backup wiederhergestellt"
 else
   warn "Kein Backup gefunden — frischer Start"
 fi
 
-# Backup-Cron für alex einrichten
+# n8n Credentials + Workflows wiederherstellen
+N8N_CREDS="r2:${CF_R2_BUCKET}/n8n/credentials-backup.json.gpg"
+N8N_FLOWS="r2:${CF_R2_BUCKET}/n8n/workflows-backup.json.gpg"
+
+if rclone ls "$N8N_CREDS" --config "$STACK_DIR/rclone/rclone.conf" &>/dev/null; then
+  info "n8n Backup wiederherstellen..."
+  rclone copy "$N8N_CREDS" /tmp/ --config "$STACK_DIR/rclone/rclone.conf"
+  rclone copy "$N8N_FLOWS" /tmp/ --config "$STACK_DIR/rclone/rclone.conf"
+
+  gpg --batch --yes --passphrase "$BACKUP_GPG_PASSWORD" \
+    --decrypt /tmp/credentials-backup.json.gpg \
+    > /tmp/credentials-backup.json
+  gpg --batch --yes --passphrase "$BACKUP_GPG_PASSWORD" \
+    --decrypt /tmp/workflows-backup.json.gpg \
+    > /tmp/workflows-backup.json
+
+  mkdir -p "$STACK_DIR/n8n-data"
+  cp /tmp/credentials-backup.json "$STACK_DIR/n8n-data/"
+  cp /tmp/workflows-backup.json "$STACK_DIR/n8n-data/"
+  rm -f /tmp/credentials-backup.json* /tmp/workflows-backup.json*
+  log "n8n Backup bereit"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# SCHRITT 6 — STACK STARTEN
+# ─────────────────────────────────────────────────────────────
+info "Schritt 6/7 — Stack starten..."
+
+cd "$STACK_DIR"
+docker compose pull
+docker compose up -d
+
+sleep 20
+docker compose ps
+
+# n8n Workflows + Credentials importieren
+if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
+  info "n8n Workflows importieren..."
+  docker compose exec -T n8n \
+    n8n import:workflow --input=/home/node/.n8n/workflows-backup.json 2>/dev/null || true
+  docker compose exec -T n8n \
+    n8n import:credentials --input=/home/node/.n8n/credentials-backup.json 2>/dev/null || true
+  log "n8n Workflows importiert"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# SCHRITT 7 — CRON + FIREWALL
+# ─────────────────────────────────────────────────────────────
+info "Schritt 7/7 — Cron + Firewall..."
+
+# Backup-Cron
 chmod +x "$STACK_DIR/backup/backup-master.sh"
-chmod +x "$STACK_DIR/backup/restore/restore-master.sh"
 (crontab -u alex -l 2>/dev/null; \
   echo "0 3 * * * $STACK_DIR/backup/backup-master.sh >> $STACK_DIR/backup/backup.log 2>&1") \
   | crontab -u alex -
-log "Backup-Cron eingerichtet (täglich 03:00 → R2)"
+log "Backup-Cron eingerichtet (täglich 03:00)"
+
+# .env.gpg Sync-Cron — verschlüsselt .env und pusht zu GitHub
+(crontab -u alex -l 2>/dev/null; \
+  echo "*/30 * * * * cd $STACK_DIR && gpg --batch --yes --passphrase \"\$BACKUP_GPG_PASSWORD\" --symmetric --cipher-algo AES256 -o .env.gpg .env && git add .env.gpg && git diff --cached --quiet || git commit -m 'update: .env sync' && git push origin main") \
+  | crontab -u alex -
+log ".env Sync-Cron eingerichtet (alle 30 Min)"
 
 # Firewall
 ufw default deny incoming
@@ -224,37 +264,19 @@ ufw allow ssh
 ufw --force enable
 log "Firewall konfiguriert"
 
-# Stack starten
-# Alle Volume-Daten liegen bereits an Ort und Stelle
-cd "$STACK_DIR"
-docker compose pull
-docker compose up -d
-
-info "Warte auf Container-Start..."
-sleep 20
-docker compose ps
-
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║      Installation abgeschlossen          ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 echo "  Stack:    $STACK_DIR"
-echo "  User:     alex (sudo + docker)"
-echo "  Backup:   täglich 03:00 → Cloudflare R2"
+echo "  User:     alex (sudo)"
+echo "  Backup:   täglich 03:00 → R2"
+echo "  .env:     alle 30 Min → GitHub"
 echo ""
 echo "  Services:"
 echo "    claw.beautymolt.com    → OpenClaw"
 echo "    search.beautymolt.com  → SearXNG"
 echo "    n8n.beautymolt.com     → n8n"
 echo "    www.beautymolt.com     → nginx"
-echo ""
-echo "  Container-Zugriff:"
-echo "    docker exec -it ugly-agent bash"
-echo "    docker exec -it n8n sh"
-echo "    docker exec -it searxng sh"
-echo ""
-echo "  Restore:"
-echo "    $STACK_DIR/backup/restore/restore-master.sh list"
-echo "    $STACK_DIR/backup/restore/restore-master.sh"
 echo ""
