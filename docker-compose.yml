@@ -32,6 +32,8 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - OPENCLAW_GATEWAY_BIND=lan
+      - OPENCLAW_GATEWAY_CONTROLUI_ALLOWEDORIGINS=["https://claw.beautymolt.com","https://claw.beautymolt.com/"]
+      - OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLYALLOWHOSTHEADERORIGINFALLBACK=true
       - SEARXNG_URL=http://searxng:8080
       - TZ=${TZ}
     volumes:
