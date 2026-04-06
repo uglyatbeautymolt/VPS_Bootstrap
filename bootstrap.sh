@@ -160,8 +160,9 @@ mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 # n8n läuft als User node (UID 1000) — Volume muss entsprechend gehören
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 
-# openclaw.json vorerstellen — bind lan + controlUi
+# openclaw.json vorerstellen — nur wenn noch nicht vorhanden (z.B. kein Backup)
 source "$STACK_DIR/.env" 2>/dev/null || true
+if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
 cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
 {
   "gateway": {
@@ -185,6 +186,9 @@ cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
 CLAWCONFIG
 chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 log "openclaw.json vorbereitet (bind: lan)"
+else
+  log "openclaw.json aus Backup wiederhergestellt — wird nicht überschrieben"
+fi
 
 # rclone konfigurieren
 source "$STACK_DIR/.env"
@@ -269,6 +273,21 @@ if [ -n "$WWW_LATEST" ]; then
   log "www Webseite wiederhergestellt → $STACK_DIR/www/"
 else
   warn "Kein www Backup gefunden — leeres www Verzeichnis"
+fi
+
+# Token aus openclaw.json Backup lesen und .env synchronisieren
+if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
+  RESTORED_TOKEN=$(python3 -c "
+import json,sys
+try:
+  d = json.load(open('$STACK_DIR/openclaw-data/openclaw.json'))
+  print(d.get('gateway',{}).get('auth',{}).get('token',''))
+except: pass
+" 2>/dev/null)
+  if [ -n "$RESTORED_TOKEN" ] && [ "$RESTORED_TOKEN" != "None" ]; then
+    sed -i "s/OPENCLAW_GATEWAY_TOKEN=.*/OPENCLAW_GATEWAY_TOKEN=$RESTORED_TOKEN/" "$STACK_DIR/.env"
+    log "OpenClaw Token aus Backup übernommen → .env synchronisiert"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────
