@@ -37,7 +37,7 @@ services:
       - SEARXNG_URL=http://searxng:8080
       - TZ=${TZ}
     volumes:
-      - ./openclaw-data:/root/.openclaw
+      - ./openclaw-data:/home/node/.openclaw
     networks:
       - ugly-net
     depends_on:
