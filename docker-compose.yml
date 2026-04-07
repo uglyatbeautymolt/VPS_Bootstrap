@@ -37,7 +37,7 @@ services:
       - SEARXNG_URL=http://searxng:8080
       - BREVO_SMTP_USER=${BREVO_SMTP_USER}
       - BREVO_SMTP_API_KEY=${BREVO_SMTP_API_KEY}
-      - BREVO_KEY=${BREVO_SMTP_API_KEY}
+      - BREVO_KEY=${BREVO_KEY}
       - TZ=${TZ}
     volumes:
       - ./openclaw-data:/home/node/.openclaw
