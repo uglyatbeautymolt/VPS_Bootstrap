@@ -35,6 +35,8 @@ services:
       - OPENCLAW_GATEWAY_CONTROLUI_ALLOWEDORIGINS=["https://claw.beautymolt.com","https://claw.beautymolt.com/"]
       - OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLYALLOWHOSTHEADERORIGINFALLBACK=true
       - SEARXNG_URL=http://searxng:8080
+      - BREVO_SMTP_USER=${BREVO_SMTP_USER}
+      - BREVO_SMTP_API_KEY=${BREVO_SMTP_API_KEY}
       - TZ=${TZ}
     volumes:
       - ./openclaw-data:/home/node/.openclaw
