@@ -1,7 +1,11 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────
 #  Ugly Stack — Secret setzen / aktualisieren
-#  Aktualisiert .env UND Cloudflare Secrets Store gleichzeitig
+#  1. git pull (aktuelle .env.gpg holen)
+#  2. .env aktualisieren
+#  3. .env neu verschlüsseln → .env.gpg
+#  4. git commit + push
+#  5. Container neu starten
 #
 #  Verwendung:
 #    ./set-secret.sh TELEGRAM_BOT_TOKEN "123456:ABC..."
@@ -9,7 +13,6 @@
 # ─────────────────────────────────────────────────────────────
 
 STACK_DIR="/home/alex/ugly-stack"
-CF_API="https://api.cloudflare.com/client/v4"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -27,10 +30,15 @@ ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
 source "$STACK_DIR/.env"
 
-[ -z "$CF_TOKEN" ]   && fail "CF_TOKEN fehlt in .env"
-[ -z "$CF_ACCOUNT" ] && fail "CF_ACCOUNT fehlt in .env"
+[ -z "$BACKUP_GPG_PASSWORD" ] && fail "BACKUP_GPG_PASSWORD fehlt in .env"
 
-# Argumente oder interaktiv
+# ── 1. git pull ──────────────────────────────────────────────
+info "git pull — aktuellen Stand holen..."
+cd "$STACK_DIR"
+git pull origin main || fail "git pull fehlgeschlagen"
+log "git pull — OK"
+
+# ── Secret Name + Wert bestimmen ────────────────────────────
 if [ -n "$1" ] && [ -n "$2" ]; then
   SECRET_NAME="$1"
   SECRET_VALUE="$2"
@@ -84,23 +92,6 @@ fi
 echo ""
 info "Aktualisiere: $SECRET_NAME"
 
-# ── 1. Cloudflare Secrets Store ──────────────────────────────
-info "Cloudflare Secrets Store..."
-CF_RESPONSE=$(curl -s -X PUT \
-  "$CF_API/accounts/$CF_ACCOUNT/secrets/$SECRET_NAME" \
-  -H "Authorization: Bearer $CF_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"name\":\"$SECRET_NAME\",\"value\":\"$SECRET_VALUE\"}")
-
-CF_SUCCESS=$(echo "$CF_RESPONSE" | jq -r '.success' 2>/dev/null)
-if [ "$CF_SUCCESS" = "true" ]; then
-  log "Cloudflare Secrets Store — OK"
-else
-  CF_ERROR=$(echo "$CF_RESPONSE" | jq -r '.errors[0].message' 2>/dev/null)
-  warn "Cloudflare Fehler: $CF_ERROR"
-  warn "Nur .env wird aktualisiert"
-fi
-
 # ── 2. .env aktualisieren ────────────────────────────────────
 info ".env aktualisieren..."
 if grep -q "^${SECRET_NAME}=" "$STACK_DIR/.env"; then
@@ -113,16 +104,35 @@ fi
 
 unset SECRET_VALUE
 
-# ── 3. Container neu starten? ────────────────────────────────
+# ── 3. .env verschlüsseln → .env.gpg ────────────────────────
+info ".env verschlüsseln..."
+gpg --batch --yes \
+  --passphrase "$BACKUP_GPG_PASSWORD" \
+  --symmetric \
+  --cipher-algo AES256 \
+  -o "$STACK_DIR/.env.gpg" \
+  "$STACK_DIR/.env" || fail "GPG Verschlüsselung fehlgeschlagen"
+log ".env.gpg aktualisiert"
+
+# ── 4. git commit + push ─────────────────────────────────────
+info "git push..."
+cd "$STACK_DIR"
+git add .env.gpg
+git diff --cached --quiet && warn "Keine Änderung in .env.gpg — kein Commit nötig" || {
+  git commit -m "secret: ${SECRET_NAME} aktualisiert"
+  git push origin main || fail "git push fehlgeschlagen"
+  log "git push — OK"
+}
+
+# ── 5. Container neu starten? ────────────────────────────────
 echo ""
 
-# Welcher Container braucht den Key?
 case "$SECRET_NAME" in
   TELEGRAM_BOT_TOKEN|OPENCLAW_GATEWAY_TOKEN|OPENROUTER_API_KEY)
     CONTAINER="openclaw"
     ;;
   N8N_*|ZOHO_SMTP_USER|ZOHO_SMTP_PASSWORD|BREVO_SMTP_USER|BREVO_SMTP_API_KEY)
-    CONTAINER="n8n"
+    CONTAINER="n8n openclaw"
     ;;
   CLOUDFLARE_TUNNEL_TOKEN)
     CONTAINER="cloudflared"
@@ -137,7 +147,7 @@ if [ -n "$CONTAINER" ]; then
   read -p "  > " RESTART
   if [ "$RESTART" = "j" ] || [ "$RESTART" = "J" ]; then
     cd "$STACK_DIR"
-    docker compose up -d --force-recreate "$CONTAINER"
+    docker compose up -d --force-recreate $CONTAINER
     log "$CONTAINER neu gestartet"
   else
     warn "$CONTAINER läuft noch mit altem Wert — manuell neu starten:"
