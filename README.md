@@ -12,6 +12,37 @@
 | search.beautymolt.com | SearXNG |
 | n8n.beautymolt.com | n8n |
 | www.beautymolt.com | nginx Webserver |
+| mail.beautymolt.com | Roundcube |
+
+## Docker Netzwerk
+
+Alle Container laufen im internen Bridge-Netzwerk **`ugly-net`**. Nach aussen ist kein Port offen — der einzige Eingang ist der Cloudflare Tunnel.
+
+```
+Internet
+   │
+   ▼
+cloudflared (Cloudflare Tunnel)
+   │
+   ▼
+nginx :80  (Reverse Proxy)
+   ├──► openclaw  :18789   (claw.beautymolt.com)
+   ├──► searxng   :8080    (search.beautymolt.com)
+   ├──► n8n       :5678    (n8n.beautymolt.com)
+   ├──► nginx www          (www.beautymolt.com)
+   └──► roundcube :80      (mail.beautymolt.com)
+```
+
+| Container | Interner Host | Port | Netzwerk |
+|-----------|--------------|------|----------|
+| cloudflared | cloudflared | — | ugly-net |
+| nginx | nginx | 80 | ugly-net |
+| openclaw | openclaw | 18789 | ugly-net |
+| searxng | searxng | 8080 | ugly-net |
+| n8n | n8n | 5678 | ugly-net |
+| roundcube | roundcube | 80 | ugly-net |
+
+Container kommunizieren intern über den Hostnamen (z.B. `http://searxng:8080`). Kein Container ist direkt vom Host oder Internet erreichbar.
 
 ## Schnellstart — Neuinstallation
 
