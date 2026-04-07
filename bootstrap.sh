@@ -35,11 +35,9 @@ REPO_URL="https://github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 info "Schritt 1/7 — Bitwarden Login..."
 echo ""
 
-# Basis-Tools installieren
 apt-get update -qq
 apt-get install -y -qq curl unzip jq gpg git
 
-# Bitwarden CLI installieren
 if ! command -v bw &>/dev/null; then
   info "Bitwarden CLI installieren..."
   curl -fsSL "https://vault.bitwarden.com/download/?app=cli&platform=linux" \
@@ -57,26 +55,22 @@ read -p "  > " BW_EMAIL
 ask "Bitwarden Master-Passwort:"
 read -s -p "  > " BW_MASTER; echo ""
 
-# Login
 BW_SESSION=$(bw login "$BW_EMAIL" "$BW_MASTER" --raw 2>/dev/null \
   || bw unlock "$BW_MASTER" --raw 2>/dev/null) \
   || fail "Bitwarden Login fehlgeschlagen"
 
 unset BW_MASTER
 
-# GPG Passwort holen
 BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
   --session "$BW_SESSION" | jq -r '.login.password')
 [ -z "$BACKUP_GPG_PASSWORD" ] || [ "$BACKUP_GPG_PASSWORD" = "null" ] \
   && fail "BACKUP_GPG_PASSWORD nicht in Bitwarden gefunden"
 
-# GitHub Token holen
 GITHUB_TOKEN=$(bw get item "GITHUB_TOKEN" \
   --session "$BW_SESSION" | jq -r '.login.password')
 [ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "null" ] \
   && fail "GITHUB_TOKEN nicht in Bitwarden gefunden"
 
-# Bitwarden sperren
 bw lock --session "$BW_SESSION" &>/dev/null
 unset BW_SESSION BW_EMAIL
 log "GPG Passwort + GitHub Token aus Bitwarden geholt — Bitwarden gesperrt"
@@ -144,21 +138,17 @@ fi
 git clone "$REPO_URL" "$STACK_DIR"
 cd "$STACK_DIR"
 
-# .env.gpg entschlüsseln
 [ ! -f ".env.gpg" ] && fail ".env.gpg nicht im Repository gefunden"
 
 gpg --batch --yes \
   --passphrase "$BACKUP_GPG_PASSWORD" \
   --decrypt .env.gpg > .env
 
-# BACKUP_GPG_PASSWORD in .env eintragen
 echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> .env
 log ".env entschlüsselt"
 
-# Verzeichnisse anlegen
 mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 
-# Laufzeit-Dateien ignorieren
 grep -q "roundcube-data/" "$STACK_DIR/.gitignore" \
   || echo "roundcube-data/" >> "$STACK_DIR/.gitignore"
 grep -q "backup/www-sync.sh" "$STACK_DIR/.gitignore" \
@@ -167,7 +157,6 @@ grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
   || echo "backup/.www-checksum" >> "$STACK_DIR/.gitignore"
 log ".gitignore aktualisiert"
 
-# openclaw.json vorerstellen — nur wenn noch nicht vorhanden (z.B. kein Backup)
 source "$STACK_DIR/.env" 2>/dev/null || true
 if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
@@ -197,7 +186,6 @@ else
   log "openclaw.json aus Backup wiederhergestellt — wird nicht überschrieben"
 fi
 
-# rclone konfigurieren
 source "$STACK_DIR/.env"
 mkdir -p "$STACK_DIR/rclone"
 cat > "$STACK_DIR/rclone/rclone.conf" << RCLONE
@@ -210,19 +198,17 @@ endpoint = ${CF_R2_ENDPOINT}
 acl = private
 RCLONE
 
-# Ownership setzen: alex für git/allgemein, Container-User (UID 1000) für ihre Volumes
+# Ownership: alex für allgemein, 1000:1000 für Container-Volumes
 chown -R alex:alex "$STACK_DIR"
 chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 
-# Git Remote mit Token konfigurieren — als alex
 sudo -u alex git -C "$STACK_DIR" remote set-url origin \
   "https://${GITHUB_TOKEN}@github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 sudo -u alex git -C "$STACK_DIR" config user.name "Ugly"
 sudo -u alex git -C "$STACK_DIR" config user.email "ugly@beautymolt.com"
 unset GITHUB_TOKEN
 log "Git Remote mit Token konfiguriert (alex kann pushen)"
-
 log "Repository geclont und konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
@@ -249,7 +235,6 @@ if [ -n "$LATEST" ]; then
 
   rm -f "/tmp/$LATEST"
 
-  # n8n Workflows + Credentials
   mkdir -p "$STACK_DIR/n8n-data"
   [ -f "$STAGING/n8n-data/workflows-backup.json" ] && \
     cp "$STAGING/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/"
@@ -257,19 +242,16 @@ if [ -n "$LATEST" ]; then
     cp "$STAGING/n8n-data/credentials-backup.json" "$STACK_DIR/n8n-data/"
   chown -R 1000:1000 "$STACK_DIR/n8n-data"
 
-  # openclaw-data
   if ls "$STAGING/openclaw-data/"*.tar.gz &>/dev/null; then
     mkdir -p "$STACK_DIR/openclaw-data"
     tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
     chown -R 1000:1000 "$STACK_DIR/openclaw-data"
   fi
 
-  # nginx
   mkdir -p "$STACK_DIR/nginx/conf.d"
   [ -d "$STAGING/nginx/conf.d" ] && \
     cp -r "$STAGING/nginx/conf.d/." "$STACK_DIR/nginx/conf.d/"
 
-  # www
   mkdir -p "$STACK_DIR/www"
   [ -d "$STAGING/www" ] && \
     cp -r "$STAGING/www/." "$STACK_DIR/www/"
@@ -280,7 +262,6 @@ else
   warn "Kein Backup gefunden — frischer Start"
 fi
 
-# Token aus openclaw.json Backup lesen und .env synchronisieren
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   RESTORED_TOKEN=$(python3 -c "
 import json,sys
@@ -307,7 +288,7 @@ docker compose up -d
 sleep 30
 docker compose ps
 
-# openclaw-data und n8n-data müssen 1000:1000 gehören (Container laufen als node/UID 1000)
+# Container-Volumes brauchen 1000:1000
 chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
@@ -343,18 +324,26 @@ CLAWCONFIG
   log "OpenClaw Gateway Token in .env aktualisiert"
 fi
 
-# n8n Workflows + Credentials importieren
+# n8n Workflows + Credentials importieren — warten bis n8n wirklich bereit
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
-  info "n8n Workflows importieren..."
+  info "n8n Workflows importieren — warte bis n8n bereit..."
+  for i in $(seq 1 24); do
+    if docker exec n8n wget -q --spider http://localhost:5678/healthz 2>/dev/null; then
+      log "n8n ist bereit"
+      break
+    fi
+    warn "n8n noch nicht bereit — warte 5s ($i/24)"
+    sleep 5
+  done
   docker cp "$STACK_DIR/n8n-data/workflows-backup.json" n8n:/tmp/workflows-backup.json
   docker cp "$STACK_DIR/n8n-data/credentials-backup.json" n8n:/tmp/credentials-backup.json
-  docker exec n8n n8n import:workflow --input=/tmp/workflows-backup.json 2>/dev/null || true
-  docker exec n8n n8n import:credentials --input=/tmp/credentials-backup.json 2>/dev/null || true
+  docker exec n8n n8n import:workflow --input=/tmp/workflows-backup.json
+  docker exec n8n n8n import:credentials --input=/tmp/credentials-backup.json
   rm -f "$STACK_DIR/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/credentials-backup.json"
-  log "n8n Workflows importiert"
+  log "n8n Workflows + Credentials importiert"
 fi
 
-# FIX: SearXNG JSON API aktivieren
+# SearXNG JSON API aktivieren
 if [ -f "$STACK_DIR/searxng-data/settings.yml" ]; then
   if ! grep -q "^\s*- json" "$STACK_DIR/searxng-data/settings.yml"; then
     sed -i 's/^\s*- html$/  - html\n  - json/' "$STACK_DIR/searxng-data/settings.yml"
@@ -370,20 +359,17 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
-# Backup-Cron (täglich 03:00 — alles in einem Archiv zu R2)
 chmod +x "$STACK_DIR/backup/backup-master.sh"
 (crontab -u alex -l 2>/dev/null; \
   echo "0 3 * * * $STACK_DIR/backup/backup-master.sh >> $STACK_DIR/backup/backup.log 2>&1") \
   | crontab -u alex -
 log "Backup-Cron eingerichtet (täglich 03:00)"
 
-# .env.gpg Sync-Cron — verschlüsselt .env und pusht zu GitHub
 (crontab -u alex -l 2>/dev/null; \
   echo "*/30 * * * * cd $STACK_DIR && source $STACK_DIR/.env && gpg --batch --yes --passphrase \"\$BACKUP_GPG_PASSWORD\" --symmetric --cipher-algo AES256 -o .env.gpg .env && git add .env.gpg && git diff --cached --quiet || git commit -m 'update: .env sync' && git push origin main") \
   | crontab -u alex -
 log ".env Sync-Cron eingerichtet (alle 30 Min)"
 
-# Firewall
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow ssh
