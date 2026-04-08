@@ -217,6 +217,8 @@ log "Repository geclont und konfiguriert"
 # ─────────────────────────────────────────────────────────────
 info "Schritt 5/7 — Backup von R2 wiederherstellen..."
 
+BACKUP_RESTORED=false
+
 LATEST=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
   --config "$STACK_DIR/rclone/rclone.conf" 2>/dev/null \
   | sort | tail -1 | awk '{print $2}')
@@ -247,6 +249,7 @@ if [ -n "$LATEST" ]; then
     mkdir -p "$STACK_DIR/openclaw-data"
     tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
     chown -R 1000:1000 "$STACK_DIR/openclaw-data"
+    BACKUP_RESTORED=true
   fi
 
   mkdir -p "$STACK_DIR/nginx/conf.d"
@@ -394,9 +397,11 @@ echo "    n8n.beautymolt.com    → n8n"
 echo "    www.beautymolt.com    → nginx"
 echo "    mail.beautymolt.com   → Roundcube"
 echo ""
-echo "  WICHTIG: OpenClaw Telegram Onboarding noch nötig!"
-echo "  docker exec -it openclaw node /app/dist/index.js onboard"
-echo ""
+if [ "$BACKUP_RESTORED" = false ]; then
+  warn "Kein Backup wiederhergestellt — Telegram Onboarding nötig:"
+  echo "  docker exec -it openclaw node /app/dist/index.js onboard"
+  echo ""
+fi
 echo "  HINWEIS: Neu einloggen damit docker-Gruppe aktiv wird:"
 echo "  su - alex"
 echo ""
