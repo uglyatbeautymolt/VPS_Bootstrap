@@ -52,26 +52,15 @@ fi
 ask "Bitwarden E-Mail:"
 read -p "  > " BW_EMAIL
 
-ask "Bitwarden Master-Passwort:"
-read -s -p "  > " BW_MASTER; echo ""
+# bw login vollständig interaktiv — User tippt Passwort + OTP direkt in bw Prompts
+# bw fragt selbst: "Master password" und falls nötig "New device verification OTP"
+info "Bitwarden Login — Passwort eingeben (und OTP falls verlangt):"
+bw login "$BW_EMAIL" 2>/dev/null || true
 
-# Login-Versuch — löst OTP aus falls New Device
-info "Verbinde mit Bitwarden..."
-BW_SESSION=$(bw login "$BW_EMAIL" "$BW_MASTER" --raw 2>/dev/null) || {
-  # Login hat einen OTP Code per E-Mail geschickt — jetzt abfragen
-  echo ""
-  warn "Bitwarden hat einen Verification Code an deine E-Mail geschickt."
-  warn "Schau JETZT in dein E-Mail Postfach und gib den Code ein."
-  echo ""
-  ask "Bitwarden OTP Code:"
-  read -p "  > " BW_OTP
-  echo ""
-  info "Login mit OTP Code..."
-  BW_SESSION=$(bw login "$BW_EMAIL" "$BW_MASTER" \
-    --method 0 --code "$BW_OTP" --raw 2>/dev/null) \
-    || fail "Bitwarden Login fehlgeschlagen — falscher OTP oder abgelaufen"
-}
-unset BW_MASTER
+# Session holen — bw ist jetzt eingeloggt, unlock braucht nur noch Passwort
+info "Bitwarden Vault entsperren:"
+BW_SESSION=$(bw unlock --raw) \
+  || fail "Bitwarden Login fehlgeschlagen"
 
 BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
   --session "$BW_SESSION" | jq -r '.login.password')
