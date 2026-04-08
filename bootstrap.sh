@@ -159,6 +159,9 @@ grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
 log ".gitignore aktualisiert"
 
 source "$STACK_DIR/.env" 2>/dev/null || true
+
+# Basis openclaw.json nur erstellen wenn noch keine vorhanden
+# (wird nach Backup-Restore in Schritt 5 überschrieben — nie danach anfassen)
 if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
 {
@@ -182,9 +185,7 @@ if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   }
 }
 CLAWCONFIG
-  log "openclaw.json vorbereitet (bind: lan)"
-else
-  log "openclaw.json aus Backup wiederhergestellt — wird nicht überschrieben"
+  log "openclaw.json Basis-Konfiguration erstellt"
 fi
 
 source "$STACK_DIR/.env"
@@ -250,6 +251,7 @@ if [ -n "$LATEST" ]; then
     tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
     chown -R 1000:1000 "$STACK_DIR/openclaw-data"
     BACKUP_RESTORED=true
+    log "OpenClaw Backup wiederhergestellt — openclaw.json aus Backup"
   fi
 
   mkdir -p "$STACK_DIR/nginx/conf.d"
@@ -266,6 +268,7 @@ else
   warn "Kein Backup gefunden — frischer Start"
 fi
 
+# OpenClaw Token aus wiederhergestellter Config in .env synchronisieren
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   RESTORED_TOKEN=$(python3 -c "
 import json,sys
@@ -276,7 +279,7 @@ except: pass
 " 2>/dev/null)
   if [ -n "$RESTORED_TOKEN" ] && [ "$RESTORED_TOKEN" != "None" ]; then
     sed -i "s/OPENCLAW_GATEWAY_TOKEN=.*/OPENCLAW_GATEWAY_TOKEN=$RESTORED_TOKEN/" "$STACK_DIR/.env"
-    log "OpenClaw Token aus Backup übernommen → .env synchronisiert"
+    log "OpenClaw Token aus Backup → .env synchronisiert"
   fi
 fi
 
@@ -296,37 +299,6 @@ docker compose ps
 chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
-
-# OpenClaw Token aus Config lesen und .env aktualisieren
-NEW_TOKEN=$(docker exec openclaw cat /home/node/.openclaw/openclaw.json 2>/dev/null \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('gateway',{}).get('auth',{}).get('token',''))" 2>/dev/null)
-if [ -n "$NEW_TOKEN" ] && [ "$NEW_TOKEN" != "null" ]; then
-  sed -i "s/OPENCLAW_GATEWAY_TOKEN=.*/OPENCLAW_GATEWAY_TOKEN=$NEW_TOKEN/" "$STACK_DIR/.env"
-  cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
-{
-  "gateway": {
-    "mode": "local",
-    "bind": "lan",
-    "auth": {
-      "mode": "token",
-      "token": "$NEW_TOKEN"
-    },
-    "trustedProxies": ["10.0.0.0/8", "172.16.0.0/12"],
-    "controlUi": {
-      "allowedOrigins": [
-        "https://claw.beautymolt.com",
-        "https://claw.beautymolt.com/"
-      ],
-      "allowInsecureAuth": true,
-      "dangerouslyAllowHostHeaderOriginFallback": true,
-      "dangerouslyDisableDeviceAuth": true
-    }
-  }
-}
-CLAWCONFIG
-  chown 1000:1000 "$STACK_DIR/openclaw-data/openclaw.json"
-  log "OpenClaw Gateway Token in .env aktualisiert"
-fi
 
 # n8n Workflows + Credentials importieren — warten bis n8n wirklich bereit
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
