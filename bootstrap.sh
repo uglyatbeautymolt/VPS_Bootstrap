@@ -55,18 +55,21 @@ read -p "  > " BW_EMAIL
 ask "Bitwarden Master-Passwort:"
 read -s -p "  > " BW_MASTER; echo ""
 
-# Erst ohne OTP versuchen (falls Session noch aktiv)
-# Schlägt fehl → New Device OTP abfragen
+# Login-Versuch — löst OTP aus falls New Device
 info "Verbinde mit Bitwarden..."
 BW_SESSION=$(bw login "$BW_EMAIL" "$BW_MASTER" --raw 2>/dev/null) || {
-  warn "Bitwarden verlangt New Device Verification."
-  warn "Schau in deine E-Mail für den OTP Code."
+  # Login hat einen OTP Code per E-Mail geschickt — jetzt abfragen
+  echo ""
+  warn "Bitwarden hat einen Verification Code an deine E-Mail geschickt."
+  warn "Schau JETZT in dein E-Mail Postfach und gib den Code ein."
+  echo ""
   ask "Bitwarden OTP Code:"
   read -p "  > " BW_OTP
+  echo ""
+  info "Login mit OTP Code..."
   BW_SESSION=$(bw login "$BW_EMAIL" "$BW_MASTER" \
     --method 0 --code "$BW_OTP" --raw 2>/dev/null) \
-    || BW_SESSION=$(bw unlock "$BW_MASTER" --raw 2>/dev/null) \
-    || fail "Bitwarden Login fehlgeschlagen"
+    || fail "Bitwarden Login fehlgeschlagen — falscher OTP oder abgelaufen"
 }
 unset BW_MASTER
 
