@@ -51,14 +51,31 @@ alex@alexstuder.ch → ugly@beautymolt.com (Cloudflare Email Routing → Zoho)
        ↓
    JavaScript Node (Prompt Injection Bereinigung)
        ↓
-   HTTP Request → http://openclaw:18789/hooks/agent
-   Header: Authorization: Bearer ${OPENCLAW_HOOK_TOKEN aus .env}
-   Body: {message, name:"Email", wakeMode:"now", deliver:false}
+   HTTP Request → http://openclaw:18789/v1/chat/completions
+   Header: Authorization: Bearer <OPENCLAW_GATEWAY_TOKEN aus openclaw.json>
+   Header: x-openclaw-agent-id: main
+   Header: Content-Type: application/json
+   Body: {"model":"openclaw","messages":[{"role":"user","content":"<aufbereitete Mail>"}]}
        ↓
-   openclaw verarbeitet
+   openclaw verarbeitet → Antwort in choices[0].message.content
        ↓
    Brevo REST API → Antwort an Absender
 ```
+
+**Wichtig:** Der HTTP Endpoint muss in openclaw.json aktiviert sein:
+```json
+"gateway": {
+  "http": {
+    "endpoints": {
+      "chatCompletions": {
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+**Wichtig:** bind muss "lan" sein (nicht "loopback") damit n8n im Docker-Netzwerk erreichbar ist!
 
 ## Brevo E-Mail Konfiguration
 
@@ -68,20 +85,6 @@ alex@alexstuder.ch → ugly@beautymolt.com (Cloudflare Email Routing → Zoho)
 - Absender: ugly@beautymolt.com (verifiziert in Brevo)
 - openclaw nutzt BREVO_KEY + Brevo REST API: https://api.brevo.com/v3/smtp/email
 - n8n nutzt BREVO_SMTP_API_KEY + smtp-relay.brevo.com:587
-
-## openclaw Hooks Konfiguration
-
-In openclaw.json (auf VPS, nicht im Repo — enthält sensitive Tokens):
-```json
-"hooks": {
-  "enabled": true,
-  "token": "<OPENCLAW_HOOK_TOKEN aus .env>",
-  "path": "/hooks"
-}
-```
-
-Achtung: "bind" muss "lan" sein (nicht "loopback") damit n8n erreichbar ist!
-Das Dashboard setzt es manchmal auf "loopback" zurück → nach Dashboard-Änderungen prüfen.
 
 ## Modelle
 
@@ -117,9 +120,11 @@ Fragt nur nach: Bitwarden E-Mail, Bitwarden Master-Passwort, Passwort für User 
 - openclaw-data und n8n-data müssen immer 1000:1000 gehören
 - n8n Import erst nach health-check auf localhost:5678/healthz
 - docker-Gruppe für alex erst nach neu einloggen aktiv
-- openclaw.json "bind" wird manchmal vom Dashboard auf "loopback" zurückgesetzt → prüfen
+- openclaw.json "bind" wird manchmal vom Dashboard auf "loopback" zurückgesetzt → nach Dashboard-Änderungen prüfen
+- openclaw HTTP Endpoint (chatCompletions) ist standardmässig deaktiviert → muss in openclaw.json aktiviert werden
 - Brevo Skill nutzt BREVO_KEY (REST API Key), nicht BREVO_SMTP_API_KEY
 - openclaw schreibt manchmal Python-Scripts statt das Brevo Skill zu nutzen → in AGENTS.md dokumentiert
+- /hooks/agent existiert NICHT — das ist der falsche Endpoint. Korrekt: /v1/chat/completions
 
 ## Arbeitsweise mit Claude
 
