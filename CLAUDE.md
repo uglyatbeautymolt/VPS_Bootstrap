@@ -9,6 +9,7 @@ Betreiber: Alex (alex@alexstuder.ch)
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
 Stack-Verzeichnis auf VPS: /home/alex/ugly-stack
 VPS User: alex (sudo, docker-Gruppe)
+Telegram Bot: @openClawBeautyBot
 
 ## GitHub Zugriff
 
@@ -51,7 +52,7 @@ alex@alexstuder.ch → ugly@beautymolt.com (Cloudflare Email Routing → Zoho)
    JavaScript Node (Prompt Injection Bereinigung)
        ↓
    HTTP Request → http://openclaw:18789/hooks/agent
-   Header: Authorization: Bearer ${OPENCLAW_HOOK_TOKEN}  ← in .env
+   Header: Authorization: Bearer ${OPENCLAW_HOOK_TOKEN aus .env}
    Body: {message, name:"Email", wakeMode:"now", deliver:false}
        ↓
    openclaw verarbeitet
@@ -108,12 +109,14 @@ chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
 
-Fragt nur nach: Bitwarden E-Mail, Bitwarden Master-Passwort, Passwort für User alex
+Fragt nur nach: Bitwarden E-Mail, Bitwarden Master-Passwort, Passwort für User alex.
+**Das openclaw Onboarding ist bereits abgeschlossen — der Zustand wird automatisch aus dem letzten Backup von R2 wiederhergestellt. Onboarding nie nochmals durchführen!**
 
 ## Bekannte Eigenheiten / Fixes
 
 - openclaw-data und n8n-data müssen immer 1000:1000 gehören
 - n8n Import erst nach health-check auf localhost:5678/healthz
+- docker-Gruppe für alex erst nach neu einloggen aktiv
 - openclaw.json "bind" wird manchmal vom Dashboard auf "loopback" zurückgesetzt → prüfen
 - Brevo Skill nutzt BREVO_KEY (REST API Key), nicht BREVO_SMTP_API_KEY
 - openclaw schreibt manchmal Python-Scripts statt das Brevo Skill zu nutzen → in AGENTS.md dokumentiert
@@ -123,5 +126,6 @@ Fragt nur nach: Bitwarden E-Mail, Bitwarden Master-Passwort, Passwort für User 
 1. Vor jedem Vorschlag relevante Dateien direkt aus dem Repo lesen
 2. Einen Schritt auf einmal — auf Bestätigung warten
 3. Kein Trial-and-Error — erst verstehen, dann handeln
-4. Bei bootstrap.sh Änderungen: komplette Datei direkt via GitHub MCP committen
-5. Nie Modell-IDs erfinden — immer von openrouter.ai verifizieren
+4. Fehler klar benennen — Ursache erklären bevor Fix vorgeschlagen wird
+5. bootstrap.sh Änderungen: direkt via GitHub MCP committen — kein manueller Download nötig
+6. Nie Modell-IDs erfinden — immer von openrouter.ai verifizieren
