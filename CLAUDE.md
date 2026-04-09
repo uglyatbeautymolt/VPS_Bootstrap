@@ -28,13 +28,11 @@ Vor jeder Änderung immer zuerst die aktuelle Datei aus dem Repo lesen!
 
 Alle Container im Docker Bridge-Netzwerk: **ugly-net**
 
-## Wichtige Zugangsdaten (nur Struktur, keine echten Werte)
+## Secrets-Verwaltung
 
 - Secrets in: `/home/alex/ugly-stack/.env` (verschlüsselt als `.env.gpg` im Repo)
 - GPG Passwort: in Bitwarden → `BACKUP_GPG_PASSWORD` (wird beim Bootstrap automatisch geholt)
 - Bitwarden Login: alex@alexstuder.ch
-
-## Secrets-Verwaltung
 
 ```bash
 cd ~/ugly-stack
@@ -50,10 +48,10 @@ alex@alexstuder.ch → ugly@beautymolt.com (Cloudflare Email Routing → Zoho)
        ↓
    n8n IMAP Trigger (Zoho IMAP)
        ↓
-   JavaScript Node (Prompt Injection bereinigung)
+   JavaScript Node (Prompt Injection Bereinigung)
        ↓
    HTTP Request → http://openclaw:18789/hooks/agent
-   Header: Authorization: Bearer UglyHook2026!beautymolt
+   Header: Authorization: Bearer ${OPENCLAW_HOOK_TOKEN}  ← in .env
    Body: {message, name:"Email", wakeMode:"now", deliver:false}
        ↓
    openclaw verarbeitet
@@ -63,7 +61,7 @@ alex@alexstuder.ch → ugly@beautymolt.com (Cloudflare Email Routing → Zoho)
 
 ## Brevo E-Mail Konfiguration
 
-- SMTP User: a50340001@smtp-brevo.com (für SMTP-Versand)
+- SMTP User: a50340001@smtp-brevo.com (für SMTP-Versand n8n)
 - SMTP API Key: in .env als BREVO_SMTP_API_KEY (xsmtpsib-...)
 - REST API Key: in .env als BREVO_KEY (xkeysib-...) ← für openclaw Skill
 - Absender: ugly@beautymolt.com (verifiziert in Brevo)
@@ -72,11 +70,11 @@ alex@alexstuder.ch → ugly@beautymolt.com (Cloudflare Email Routing → Zoho)
 
 ## openclaw Hooks Konfiguration
 
-In openclaw.json (auf VPS, nicht im Repo):
+In openclaw.json (auf VPS, nicht im Repo — enthält sensitive Tokens):
 ```json
 "hooks": {
   "enabled": true,
-  "token": "UglyHook2026!beautymolt",
+  "token": "<OPENCLAW_HOOK_TOKEN aus .env>",
   "path": "/hooks"
 }
 ```
