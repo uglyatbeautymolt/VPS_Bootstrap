@@ -40,8 +40,6 @@ cd ~/ugly-stack
 ./set-secret.sh SECRET_NAME "wert"   # aktualisiert .env + verschlüsselt + git push
 ```
 
-Das Script macht: git pull → .env updaten → GPG verschlüsseln → git push → Container neu starten
-
 ## E-Mail Workflow (E-Mail → Ugly → Antwort)
 
 ```
@@ -51,31 +49,44 @@ alex@alexstuder.ch → ugly@beautymolt.com (Cloudflare Email Routing → Zoho)
        ↓
    JavaScript Node (Prompt Injection Bereinigung)
        ↓
-   HTTP Request → http://openclaw:18789/v1/chat/completions
-   Header: Authorization: Bearer <OPENCLAW_GATEWAY_TOKEN aus openclaw.json>
-   Header: x-openclaw-agent-id: main
+   HTTP Request → http://openclaw:18789/hooks/agent
+   Header: x-openclaw-token: <OPENCLAW_HOOK_TOKEN aus .env>
    Header: Content-Type: application/json
-   Body: {"model":"openclaw","messages":[{"role":"user","content":"<aufbereitete Mail>"}]}
+   Body: {"message":"<aufbereitete Mail>","name":"Email","wakeMode":"now","deliver":false}
        ↓
-   openclaw verarbeitet → Antwort in choices[0].message.content
+   openclaw verarbeitet (fire-and-forget, gibt runId zurück)
        ↓
    Brevo REST API → Antwort an Absender
 ```
 
-**Wichtig:** Der HTTP Endpoint muss in openclaw.json aktiviert sein:
+## openclaw Webhook-Konfiguration (openclaw.json)
+
+**WICHTIG:** `hooks` ist ein **Top-Level-Key** — NICHT unter `gateway` einbetten!
+
 ```json
-"gateway": {
-  "http": {
-    "endpoints": {
-      "chatCompletions": {
-        "enabled": true
-      }
-    }
+{
+  "gateway": { ... },
+  "hooks": {
+    "enabled": true,
+    "token": "<OPENCLAW_HOOK_TOKEN>",
+    "path": "/hooks"
   }
 }
 ```
 
-**Wichtig:** bind muss "lan" sein (nicht "loopback") damit n8n im Docker-Netzwerk erreichbar ist!
+**WICHTIG:** `gateway.bind` muss `"lan"` sein (nicht `"loopback"`) damit n8n im Docker-Netzwerk erreichbar ist!
+
+**Auth-Header:** `x-openclaw-token: <token>` — NICHT `Authorization: Bearer` für Hooks!
+
+Test vom VPS:
+```bash
+docker exec n8n wget -qO- \
+  --header='x-openclaw-token: TOKEN' \
+  --header='Content-Type: application/json' \
+  --post-data='{"message":"Test","name":"Email","wakeMode":"now","deliver":false}' \
+  'http://openclaw:18789/hooks/agent'
+# Erwartete Antwort: {"ok":true,"runId":"..."}
+```
 
 ## Brevo E-Mail Konfiguration
 
@@ -120,11 +131,11 @@ Fragt nur nach: Bitwarden E-Mail, Bitwarden Master-Passwort, Passwort für User 
 - openclaw-data und n8n-data müssen immer 1000:1000 gehören
 - n8n Import erst nach health-check auf localhost:5678/healthz
 - docker-Gruppe für alex erst nach neu einloggen aktiv
-- openclaw.json "bind" wird manchmal vom Dashboard auf "loopback" zurückgesetzt → nach Dashboard-Änderungen prüfen
-- openclaw HTTP Endpoint (chatCompletions) ist standardmässig deaktiviert → muss in openclaw.json aktiviert werden
+- `gateway.bind` wird manchmal vom Dashboard auf `"loopback"` zurückgesetzt → nach Dashboard-Änderungen prüfen
+- `hooks` muss Top-Level-Key sein — NICHT unter `gateway` einbetten (gibt "Unrecognized key" Fehler)
+- Hook-Auth-Header ist `x-openclaw-token` — NICHT `Authorization: Bearer`
 - Brevo Skill nutzt BREVO_KEY (REST API Key), nicht BREVO_SMTP_API_KEY
 - openclaw schreibt manchmal Python-Scripts statt das Brevo Skill zu nutzen → in AGENTS.md dokumentiert
-- /hooks/agent existiert NICHT — das ist der falsche Endpoint. Korrekt: /v1/chat/completions
 
 ## Arbeitsweise mit Claude
 
