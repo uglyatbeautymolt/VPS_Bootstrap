@@ -52,12 +52,9 @@ fi
 ask "Bitwarden E-Mail:"
 read -p "  > " BW_EMAIL
 
-info "Bitwarden Login — Passwort eingeben (und OTP falls verlangt):"
-bw login "$BW_EMAIL" 2>/dev/null || true
-
 info "Bitwarden Vault entsperren..."
 echo "  → Gib dein Master-Passwort ein und drücke Enter (unsichtbare Eingabe):"
-BW_SESSION=$(bw unlock --raw) \
+BW_SESSION=$(bw unlock "$BW_EMAIL" --raw) \
   || fail "Bitwarden Login fehlgeschlagen"
 
 BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
