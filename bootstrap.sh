@@ -17,6 +17,19 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
+# Punkte-Animation während ein Hintergrundprozess läuft
+# Verwendung: bw_spinner $PID "Text der angezeigt wird"
+bw_spinner() {
+  local pid=$1
+  local text=$2
+  printf "  ${BLUE}→${NC} ${text} "
+  while kill -0 "$pid" 2>/dev/null; do
+    printf "."
+    sleep 0.1
+  done
+  echo ""
+}
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║ Ugly Stack — Bootstrap                   ║"
@@ -52,25 +65,84 @@ fi
 ask "Bitwarden E-Mail:"
 read -p "  > " BW_EMAIL
 
-info "Bitwarden Login..."
-bw login "$BW_EMAIL" 2>/dev/null || true
+ask "Bitwarden Master-Passwort:"
+read -s -p "  > " BW_PASSWORD; echo ""
 
-info "Bitwarden Vault entsperren..."
-BW_SESSION=$(bw unlock --raw) \
-  || fail "Bitwarden Login fehlgeschlagen"
+export BW_PASSWORD
 
-BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
-  --session "$BW_SESSION" | jq -r '.login.password')
+# ── Schritt 1a: Erster Login-Versuch (löst OTP-Mail aus) ─────
+# Auf einem neuen Gerät schlägt bw login immer fehl weil Bitwarden
+# zuerst einen OTP-Code per E-Mail schickt (New Device Protection).
+# Dieser erste Versuch ist bewusst — er triggert die OTP-Mail.
+BW_TMP=$(mktemp)
+bw logout &>/dev/null || true
+
+bw login "$BW_EMAIL" --passwordenv BW_PASSWORD --raw \
+  > "$BW_TMP" 2>&1 &
+BW_PID=$!
+bw_spinner $BW_PID "Login bei Bitwarden läuft"
+wait $BW_PID; BW_EXIT=$?
+
+BW_SESSION=$(cat "$BW_TMP" | tr -d '\n\r')
+rm -f "$BW_TMP"
+
+# ── Schritt 1b: OTP abfragen und zweiten Login durchführen ───
+# Auch wenn der erste Versuch zufällig klappt (vertrauenswürdiges
+# Gerät im Cache), prüfen wir ob die Session gültig ist.
+if [ $BW_EXIT -ne 0 ] || [ -z "$BW_SESSION" ] || [ ${#BW_SESSION} -lt 20 ]; then
+  echo ""
+  warn "Bitwarden hat einen Bestätigungscode an deine E-Mail gesendet."
+  ask "OTP-Code aus der E-Mail eingeben:"
+  read -p "  > " BW_OTP
+
+  bw logout &>/dev/null || true
+
+  BW_TMP2=$(mktemp)
+  bw login "$BW_EMAIL" --passwordenv BW_PASSWORD \
+    --method 1 --code "$BW_OTP" --raw \
+    > "$BW_TMP2" 2>&1 &
+  BW_PID2=$!
+  bw_spinner $BW_PID2 "Login mit OTP läuft"
+  wait $BW_PID2; BW_EXIT2=$?
+
+  BW_SESSION=$(cat "$BW_TMP2" | tr -d '\n\r')
+  rm -f "$BW_TMP2"
+
+  if [ $BW_EXIT2 -ne 0 ] || [ -z "$BW_SESSION" ] || [ ${#BW_SESSION} -lt 20 ]; then
+    fail "Bitwarden Login fehlgeschlagen — E-Mail, Passwort oder OTP-Code prüfen"
+  fi
+fi
+
+unset BW_PASSWORD
+
+# ── Schritt 1c: Secrets aus dem Vault holen ──────────────────
+BW_TMP3=$(mktemp)
+(
+  bw get item "BACKUP_GPG_PASSWORD" --session "$BW_SESSION" \
+    | jq -r '.login.password' > "${BW_TMP3}.gpg" 2>/dev/null
+  bw get item "GITHUB_TOKEN" --session "$BW_SESSION" \
+    | jq -r '.login.password' > "${BW_TMP3}.gh" 2>/dev/null
+) &
+BW_PID3=$!
+bw_spinner $BW_PID3 "Secrets aus Bitwarden holen"
+wait $BW_PID3
+
+BACKUP_GPG_PASSWORD=$(cat "${BW_TMP3}.gpg" 2>/dev/null | tr -d '\n\r')
+GITHUB_TOKEN=$(cat "${BW_TMP3}.gh" 2>/dev/null | tr -d '\n\r')
+rm -f "$BW_TMP3" "${BW_TMP3}.gpg" "${BW_TMP3}.gh"
+
 [ -z "$BACKUP_GPG_PASSWORD" ] || [ "$BACKUP_GPG_PASSWORD" = "null" ] \
   && fail "BACKUP_GPG_PASSWORD nicht in Bitwarden gefunden"
-
-GITHUB_TOKEN=$(bw get item "GITHUB_TOKEN" \
-  --session "$BW_SESSION" | jq -r '.login.password')
 [ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "null" ] \
   && fail "GITHUB_TOKEN nicht in Bitwarden gefunden"
 
-bw lock --session "$BW_SESSION" &>/dev/null
+# ── Schritt 1d: Bitwarden sperren ────────────────────────────
+bw lock --session "$BW_SESSION" &>/dev/null &
+BW_PID4=$!
+bw_spinner $BW_PID4 "Bitwarden sperren"
+wait $BW_PID4
 unset BW_SESSION BW_EMAIL
+
 log "GPG Passwort + GitHub Token aus Bitwarden geholt — Bitwarden gesperrt"
 
 # ─────────────────────────────────────────────────────────────
@@ -302,7 +374,6 @@ if cfg.get("gateway", {}).get("bind") != "lan":
 
 # hooks muss Top-Level sein mit enabled:true
 if not cfg.get("hooks", {}).get("enabled"):
-    # Token aus .env holen falls vorhanden
     import os
     hook_token = ""
     env_path = "$STACK_DIR/.env"
