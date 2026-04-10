@@ -178,7 +178,12 @@ gpg --batch --yes \
   --passphrase "$BACKUP_GPG_PASSWORD" \
   --decrypt .env.gpg > .env
 
-echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> .env
+# BACKUP_GPG_PASSWORD idempotent in .env eintragen (kein Duplikat)
+if ! grep -q "^BACKUP_GPG_PASSWORD=" "$STACK_DIR/.env"; then
+  echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> "$STACK_DIR/.env"
+else
+  sed -i "s|^BACKUP_GPG_PASSWORD=.*|BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}|" "$STACK_DIR/.env"
+fi
 log ".env entschlüsselt"
 
 # Alle Scripts ausführbar machen (GitHub push_files setzt kein +x)
