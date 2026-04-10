@@ -1,17 +1,16 @@
-# Ugly Stack — Projektkontext
+# Ugly Stack
 
-Persönlicher KI-Agent "Ugly" auf Hostinger VPS (Ubuntu 24.04).
+VPS: beautymolt.com (Hostinger, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
-Stack: /home/alex/ugly-stack | User: alex | Telegram: @openClawBeautyBot
 
 ## Services
 
 | Container | URL | Port |
 |-----------|-----|------|
 | openclaw | claw.beautymolt.com | 18789 |
-| nginx | www.beautymolt.com | 80 |
 | searxng | search.beautymolt.com | 8080 |
 | n8n | n8n.beautymolt.com | 5678 |
+| nginx | www.beautymolt.com | 80 |
 | roundcube | mail.beautymolt.com | 80 |
 | cloudflared | — | — |
 
@@ -19,93 +18,45 @@ Docker Bridge-Netzwerk: **ugly-net**
 
 ## Secrets
 
-- `.env` auf VPS (verschlüsselt als `.env.gpg` im Repo)
-- GPG Passwort: Bitwarden → `BACKUP_GPG_PASSWORD`
-- Update: `./set-secret.sh SECRET_NAME "wert"`
+`.env` auf VPS → `.env.gpg` im Repo (GPG). Update: `bash set-secret.sh NAME "wert"`
+`.env.example` wird nie benötigt — nur `.env.gpg` zählt.
+Scripts immer mit `bash scriptname.sh` — nie `./` (Git setzt kein +x).
+sudo-Timeout: 60 Min (einmal Passwort → 1h gültig).
 
 ## E-Mail Workflow
 
-```
-ugly@beautymolt.com (Zoho IMAP)
-  → n8n IMAP Trigger
-  → JS Node (Sanitization)
-  → HTTP POST http://openclaw:18789/hooks/agent
-    Header: Authorization: Bearer <OPENCLAW_HOOK_TOKEN>
-    Body: {"message":"...","name":"Email","wakeMode":"now"}
-  → openclaw antwortet via Brevo REST API
-```
+ugly@beautymolt.com (Zoho IMAP) → n8n → HTTP POST http://openclaw:18789/hooks/agent
+Header: `Authorization: Bearer <OPENCLAW_HOOK_TOKEN>`
+Body: `{"message":"...","name":"Email","wakeMode":"now"}`
+**Handlungsauftrag MUSS im message-Feld VOR dem Mail-Inhalt stehen.**
 
-**n8n Prompt:** Handlungsauftrag MUSS vor dem Mail-Inhalt stehen — sonst blockiert openclaw sich selbst.
+## openclaw.json — Kritisch
 
-## openclaw.json — kritische Felder
-
-```json
-{
-  "gateway": { "bind": "lan" },
-  "hooks": {
-    "enabled": true,
-    "token": "<OPENCLAW_HOOK_TOKEN>",
-    "path": "/hooks"
-  }
-}
-```
-
-- `hooks` ist **Top-Level-Key** — nie unter `gateway` einbetten (→ "Unrecognized key" Fehler)
-- `bind: lan` — nie `loopback` (Dashboard setzt es manchmal zurück → prüfen)
-- Auth-Header: `Authorization: Bearer <TOKEN>` — nicht `x-openclaw-token`
-
-Hook testen:
-```bash
-docker exec n8n wget -qO- \
-  --header='Authorization: Bearer TOKEN' \
-  --header='Content-Type: application/json' \
-  --post-data='{"message":"Test","name":"Email","wakeMode":"now"}' \
-  'http://openclaw:18789/hooks/agent'
-# → {"ok":true,"runId":"..."}
-```
-
-## openclaw Debugging
-
-```bash
-# Vollständiges Gateway-Log (nicht docker logs!)
-tail -50 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log
-
-# Hook-Call testen und sofort Log prüfen
-docker exec openclaw wget -qO- http://localhost:18789/hooks/agent \
-  --header='Authorization: Bearer TOKEN' \
-  --header='Content-Type: application/json' \
-  --post-data='{"message":"Test","name":"Email","wakeMode":"now"}' \
-&& tail -10 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log
-```
+- `bind: lan` — nie loopback (Dashboard setzt es manchmal zurück)
+- `hooks` ist **Top-Level-Key** — nie unter `gateway` einbetten
+- Hook Auth: `Authorization: Bearer` — nie `x-openclaw-token`
+- Debugging: `tail -50 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log`
 
 ## Brevo
 
-- SMTP: `a50340001@smtp-brevo.com` + `BREVO_SMTP_API_KEY` (für n8n)
-- REST: `BREVO_KEY` (xkeysib-...) für openclaw E-Mail-Versand via curl
-- Absender: `ugly@beautymolt.com`
-- openclaw sendet Mails direkt per curl exec — kein separater Skill nötig
-- Backup-Mail JSON immer via python3 bauen — Shell-Interpolation bricht bei Sonderzeichen
+- `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via **Brevo Skill**
+- `BREVO_SMTP_API_KEY` (xsmtpsib-...): n8n SMTP
+- Absender immer: `ugly@beautymolt.com` (Name: Ugly)
 
 ## Modelle
 
 Primary: `openrouter/deepseek/deepseek-v3.2`
-Wechseln: `docker exec openclaw openclaw config set agents.defaults.model.primary "openrouter/..."`
-Dashboard-Dropdown hat Bug → immer CLI verwenden!
+Wechseln nur via CLI — Dashboard-Dropdown hat Bug.
 
 ## Backup
 
-- Täglich 03:00 Cron → Cloudflare R2 (GPG AES256), 7 Backups
-- Protokoll-Mail nach jedem Backup an alex@alexstuder.ch
-- Manuell: `./backup/backup-master.sh`
-- openclaw-data braucht `sudo tar` (Ownership 1000:1000)
-- Scripts aus GitHub haben kein +x → bootstrap.sh setzt `chmod +x` nach clone
+Täglich 03:00 → R2 (GPG AES256), 7 Backups, danach Verifikation + Mail an alex@alexstuder.ch
+Manuell: `bash backup/backup-master.sh`
+Verify: `bash backup/verify-backup.sh`
+Skills in `openclaw-data/workspace/skills/` → im Backup enthalten.
+openclaw-data Ownership: 1000:1000 → sudo nötig für Lesen/Schreiben.
 
 ## Bootstrap
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh \
-  -o bootstrap.sh && chmod +x bootstrap.sh && ./bootstrap.sh
-```
-
-Fragt nur: Bitwarden E-Mail, Master-Passwort, Passwort für alex.
-Bootstrap setzt nach Restore automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers für tar.
+Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP falls neues Gerät), Passwort für alex.
+Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 60min.
