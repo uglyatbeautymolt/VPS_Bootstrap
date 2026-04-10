@@ -52,12 +52,9 @@ fi
 ask "Bitwarden E-Mail:"
 read -p "  > " BW_EMAIL
 
-# bw login vollständig interaktiv — User tippt Passwort + OTP direkt in bw Prompts
-# bw fragt selbst: "Master password" und falls nötig "New device verification OTP"
 info "Bitwarden Login — Passwort eingeben (und OTP falls verlangt):"
 bw login "$BW_EMAIL" 2>/dev/null || true
 
-# Session holen — bw ist jetzt eingeloggt, unlock braucht nur noch Passwort
 info "Bitwarden Vault entsperren:"
 BW_SESSION=$(bw unlock --raw) \
   || fail "Bitwarden Login fehlgeschlagen"
@@ -148,6 +145,15 @@ gpg --batch --yes \
 echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> .env
 log ".env entschlüsselt"
 
+# Alle Scripts ausführbar machen (GitHub push_files setzt kein +x)
+chmod +x "$STACK_DIR/bootstrap.sh"
+chmod +x "$STACK_DIR/set-secret.sh"
+chmod +x "$STACK_DIR/backup/backup-master.sh"
+chmod +x "$STACK_DIR/backup/modules/"*.sh
+chmod +x "$STACK_DIR/backup/restore/restore-master.sh"
+chmod +x "$STACK_DIR/backup/restore/modules/"*.sh
+log "Scripts ausführbar gemacht"
+
 mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 
 grep -q "roundcube-data/" "$STACK_DIR/.gitignore" \
@@ -158,10 +164,15 @@ grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
   || echo "backup/.www-checksum" >> "$STACK_DIR/.gitignore"
 log ".gitignore aktualisiert"
 
+# sudoers: alex darf tar auf openclaw-data ohne Passwort ausführen (für Backup)
+echo "alex ALL=(root) NOPASSWD: /bin/tar -czf * -C ${STACK_DIR}/openclaw-data ." \
+  > /etc/sudoers.d/alex-openclaw-backup
+chmod 440 /etc/sudoers.d/alex-openclaw-backup
+log "sudoers: alex darf tar auf openclaw-data ohne Passwort"
+
 source "$STACK_DIR/.env" 2>/dev/null || true
 
 # Basis openclaw.json nur erstellen wenn noch keine vorhanden
-# (wird nach Backup-Restore in Schritt 5 überschrieben — nie danach anfassen)
 if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
 {
@@ -200,7 +211,6 @@ endpoint = ${CF_R2_ENDPOINT}
 acl = private
 RCLONE
 
-# Ownership: alex für allgemein, 1000:1000 für Container-Volumes
 chown -R alex:alex "$STACK_DIR"
 chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
@@ -210,7 +220,7 @@ sudo -u alex git -C "$STACK_DIR" remote set-url origin \
 sudo -u alex git -C "$STACK_DIR" config user.name "Ugly"
 sudo -u alex git -C "$STACK_DIR" config user.email "ugly@beautymolt.com"
 unset GITHUB_TOKEN
-log "Git Remote mit Token konfiguriert (alex kann pushen)"
+log "Git Remote mit Token konfiguriert"
 log "Repository geclont und konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
@@ -251,7 +261,7 @@ if [ -n "$LATEST" ]; then
     tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
     chown -R 1000:1000 "$STACK_DIR/openclaw-data"
     BACKUP_RESTORED=true
-    log "OpenClaw Backup wiederhergestellt — openclaw.json aus Backup"
+    log "OpenClaw Backup wiederhergestellt"
   fi
 
   mkdir -p "$STACK_DIR/nginx/conf.d"
@@ -268,10 +278,64 @@ else
   warn "Kein Backup gefunden — frischer Start"
 fi
 
-# OpenClaw Token aus wiederhergestellter Config in .env synchronisieren
+# Post-Restore: openclaw.json auf korrekte Konfiguration prüfen und fixieren
+info "openclaw.json prüfen und korrigieren..."
+if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
+  python3 << PYFIX
+import json, sys
+
+path = "$STACK_DIR/openclaw-data/openclaw.json"
+try:
+    with open(path) as f:
+        cfg = json.load(f)
+except Exception as e:
+    print(f"openclaw.json Lesefehler: {e}")
+    sys.exit(1)
+
+changed = False
+
+# bind muss "lan" sein
+if cfg.get("gateway", {}).get("bind") != "lan":
+    cfg.setdefault("gateway", {})["bind"] = "lan"
+    changed = True
+    print("  Fix: bind → lan")
+
+# hooks muss Top-Level sein mit enabled:true
+if not cfg.get("hooks", {}).get("enabled"):
+    # Token aus .env holen falls vorhanden
+    import os
+    hook_token = ""
+    env_path = "$STACK_DIR/.env"
+    try:
+        with open(env_path) as ef:
+            for line in ef:
+                if line.startswith("OPENCLAW_HOOK_TOKEN="):
+                    hook_token = line.strip().split("=", 1)[1]
+    except:
+        pass
+    cfg["hooks"] = {
+        "enabled": True,
+        "token": hook_token if hook_token else "UglyHook2026!beautymolt",
+        "path": "/hooks"
+    }
+    changed = True
+    print("  Fix: hooks Block hinzugefügt")
+
+if changed:
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=2)
+    print("  openclaw.json aktualisiert")
+else:
+    print("  openclaw.json bereits korrekt (bind:lan, hooks aktiv)")
+PYFIX
+  chown 1000:1000 "$STACK_DIR/openclaw-data/openclaw.json"
+  log "openclaw.json geprüft"
+fi
+
+# OpenClaw Token aus Config in .env synchronisieren
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   RESTORED_TOKEN=$(python3 -c "
-import json,sys
+import json
 try:
   d = json.load(open('$STACK_DIR/openclaw-data/openclaw.json'))
   print(d.get('gateway',{}).get('auth',{}).get('token',''))
@@ -279,7 +343,7 @@ except: pass
 " 2>/dev/null)
   if [ -n "$RESTORED_TOKEN" ] && [ "$RESTORED_TOKEN" != "None" ]; then
     sed -i "s/OPENCLAW_GATEWAY_TOKEN=.*/OPENCLAW_GATEWAY_TOKEN=$RESTORED_TOKEN/" "$STACK_DIR/.env"
-    log "OpenClaw Token aus Backup → .env synchronisiert"
+    log "OpenClaw Token aus Config → .env synchronisiert"
   fi
 fi
 
@@ -295,12 +359,11 @@ docker compose up -d
 sleep 30
 docker compose ps
 
-# Container-Volumes brauchen 1000:1000
 chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
 
-# n8n Workflows + Credentials importieren — warten bis n8n wirklich bereit
+# n8n Workflows + Credentials importieren
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren — warte bis n8n bereit..."
   for i in $(seq 1 24); do
@@ -335,7 +398,6 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
-chmod +x "$STACK_DIR/backup/backup-master.sh"
 (crontab -u alex -l 2>/dev/null; \
   echo "0 3 * * * $STACK_DIR/backup/backup-master.sh >> $STACK_DIR/backup/backup.log 2>&1") \
   | crontab -u alex -
