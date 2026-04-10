@@ -17,8 +17,8 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
-# Punkte-Animation während ein Hintergrundprozess läuft
-# Verwendung: bw_spinner $PID "Text der angezeigt wird"
+# Punkte-Animation für nicht-interaktive Hintergrundprozesse
+# NICHT für bw login verwenden — der braucht ein echtes Terminal
 bw_spinner() {
   local pid=$1
   local text=$2
@@ -70,77 +70,41 @@ read -s -p "  > " BW_PASSWORD; echo ""
 
 export BW_PASSWORD
 
-# ── Schritt 1a: Erster Login-Versuch (löst OTP-Mail aus) ─────
-# Auf einem neuen Gerät schlägt bw login immer fehl weil Bitwarden
-# zuerst einen OTP-Code per E-Mail schickt (New Device Protection).
-# Dieser erste Versuch ist bewusst — er triggert die OTP-Mail.
-BW_TMP=$(mktemp)
+# ── Schritt 1a: Login bei Bitwarden ──────────────────────────
+# bw login läuft im Vordergrund direkt auf dem Terminal.
+# Bei einem neuen Gerät sendet Bitwarden automatisch einen OTP-Code
+# per E-Mail — bw login zeigt dann selbst einen Prompt dafür.
+info "Verbinde mit Bitwarden..."
 bw logout &>/dev/null || true
 
-bw login "$BW_EMAIL" --passwordenv BW_PASSWORD --raw \
-  > "$BW_TMP" 2>&1 &
-BW_PID=$!
-bw_spinner $BW_PID "Login bei Bitwarden läuft"
-wait $BW_PID; BW_EXIT=$?
-
-BW_SESSION=$(cat "$BW_TMP" | tr -d '\n\r')
-rm -f "$BW_TMP"
-
-# ── Schritt 1b: OTP abfragen und zweiten Login durchführen ───
-# Auch wenn der erste Versuch zufällig klappt (vertrauenswürdiges
-# Gerät im Cache), prüfen wir ob die Session gültig ist.
-if [ $BW_EXIT -ne 0 ] || [ -z "$BW_SESSION" ] || [ ${#BW_SESSION} -lt 20 ]; then
-  echo ""
-  warn "Bitwarden hat einen Bestätigungscode an deine E-Mail gesendet."
-  ask "OTP-Code aus der E-Mail eingeben:"
-  read -p "  > " BW_OTP
-
-  bw logout &>/dev/null || true
-
-  BW_TMP2=$(mktemp)
-  bw login "$BW_EMAIL" --passwordenv BW_PASSWORD \
-    --method 1 --code "$BW_OTP" --raw \
-    > "$BW_TMP2" 2>&1 &
-  BW_PID2=$!
-  bw_spinner $BW_PID2 "Login mit OTP läuft"
-  wait $BW_PID2; BW_EXIT2=$?
-
-  BW_SESSION=$(cat "$BW_TMP2" | tr -d '\n\r')
-  rm -f "$BW_TMP2"
-
-  if [ $BW_EXIT2 -ne 0 ] || [ -z "$BW_SESSION" ] || [ ${#BW_SESSION} -lt 20 ]; then
-    fail "Bitwarden Login fehlgeschlagen — E-Mail, Passwort oder OTP-Code prüfen"
-  fi
-fi
+BW_SESSION=$(bw login "$BW_EMAIL" --passwordenv BW_PASSWORD --raw) \
+  || fail "Bitwarden Login fehlgeschlagen — E-Mail, Passwort oder OTP-Code prüfen"
 
 unset BW_PASSWORD
 
-# ── Schritt 1c: Secrets aus dem Vault holen ──────────────────
-BW_TMP3=$(mktemp)
-(
-  bw get item "BACKUP_GPG_PASSWORD" --session "$BW_SESSION" \
-    | jq -r '.login.password' > "${BW_TMP3}.gpg" 2>/dev/null
-  bw get item "GITHUB_TOKEN" --session "$BW_SESSION" \
-    | jq -r '.login.password' > "${BW_TMP3}.gh" 2>/dev/null
-) &
-BW_PID3=$!
-bw_spinner $BW_PID3 "Secrets aus Bitwarden holen"
-wait $BW_PID3
+[ -z "$BW_SESSION" ] || [ ${#BW_SESSION} -lt 20 ] \
+  && fail "Bitwarden Session ungültig — Login fehlgeschlagen"
 
-BACKUP_GPG_PASSWORD=$(cat "${BW_TMP3}.gpg" 2>/dev/null | tr -d '\n\r')
-GITHUB_TOKEN=$(cat "${BW_TMP3}.gh" 2>/dev/null | tr -d '\n\r')
-rm -f "$BW_TMP3" "${BW_TMP3}.gpg" "${BW_TMP3}.gh"
+log "Bitwarden Login erfolgreich"
+
+# ── Schritt 1b: Secrets aus dem Vault holen ──────────────────
+info "Secrets aus Bitwarden holen..."
+
+BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
+  --session "$BW_SESSION" | jq -r '.login.password') \
+  || fail "Fehler beim Holen von BACKUP_GPG_PASSWORD"
+
+GITHUB_TOKEN=$(bw get item "GITHUB_TOKEN" \
+  --session "$BW_SESSION" | jq -r '.login.password') \
+  || fail "Fehler beim Holen von GITHUB_TOKEN"
 
 [ -z "$BACKUP_GPG_PASSWORD" ] || [ "$BACKUP_GPG_PASSWORD" = "null" ] \
   && fail "BACKUP_GPG_PASSWORD nicht in Bitwarden gefunden"
 [ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "null" ] \
   && fail "GITHUB_TOKEN nicht in Bitwarden gefunden"
 
-# ── Schritt 1d: Bitwarden sperren ────────────────────────────
-bw lock --session "$BW_SESSION" &>/dev/null &
-BW_PID4=$!
-bw_spinner $BW_PID4 "Bitwarden sperren"
-wait $BW_PID4
+# ── Schritt 1c: Bitwarden sperren ────────────────────────────
+bw lock --session "$BW_SESSION" &>/dev/null || true
 unset BW_SESSION BW_EMAIL
 
 log "GPG Passwort + GitHub Token aus Bitwarden geholt — Bitwarden gesperrt"
