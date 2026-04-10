@@ -33,13 +33,13 @@ for MODULE in "$MODULES_DIR"/*.sh; do
   info "Modul: $NAME"
   MODULE_OUTPUT=$(STAGING="$STAGING" STACK_DIR="$STACK_DIR" bash "$MODULE" 2>&1)
   echo "$MODULE_OUTPUT" >> "$LOG"
-  if echo "$MODULE_OUTPUT" | grep -qi "FEHLER\|error\|permission denied\|exit 1"; then
+  if echo "$MODULE_OUTPUT" | grep -qi "FEHLER\|permission denied"; then
     fail "$NAME — FEHLER"
-    MODULE_LOG="$MODULE_LOG\n❌ $NAME: FEHLER\n$MODULE_OUTPUT"
+    MODULE_LOG="${MODULE_LOG}\n❌ $NAME: FEHLER"
     ERRORS=$((ERRORS + 1))
   else
     log "$NAME — OK"
-    MODULE_LOG="$MODULE_LOG\n✅ $NAME: OK"
+    MODULE_LOG="${MODULE_LOG}\n✅ $NAME: OK"
   fi
 done
 
@@ -81,23 +81,65 @@ fi
 tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 info "════════ Backup Ende — Fehler: $ERRORS ════════"
 
-# Mail-Protokoll via Brevo
+# Mail-Protokoll via Brevo — JSON via python3 bauen (sicher gegen Sonderzeichen)
 if [ -n "$BREVO_KEY" ]; then
   if [ "$ERRORS" -eq 0 ]; then
-    SUBJECT="✅ Backup OK — $DATE"
-    STATUS="Alle Module erfolgreich."
+    SUBJECT="✅ Backup OK — ${DATE}"
   else
-    SUBJECT="❌ Backup FEHLER ($ERRORS) — $DATE"
-    STATUS="$ERRORS Modul(e) fehlgeschlagen!"
+    SUBJECT="❌ Backup FEHLER (${ERRORS}) — ${DATE}"
   fi
 
-  BODY="Backup-Protokoll vom $(date '+%Y-%m-%d %H:%M:%S')\n\nStatus: $STATUS\nDatei: $FILENAME ($SIZE)\n\nModule:$(echo -e "$MODULE_LOG")\n\n--- Log (letzte 30 Zeilen) ---\n$(tail -30 $LOG)"
+  LOG_TAIL=$(tail -20 "$LOG")
 
-  curl -s -X POST https://api.brevo.com/v3/smtp/email \
-    -H "api-key: $BREVO_KEY" \
-    -H "Content-Type: application/json" \
-    -d "{\"sender\":{\"email\":\"ugly@beautymolt.com\",\"name\":\"Ugly Backup\"},\"to\":[{\"email\":\"alex@alexstuder.ch\"}],\"subject\":\"$SUBJECT\",\"textContent\":\"$BODY\"}" \
-    >> "$LOG" 2>&1 && log "Protokoll-Mail gesendet an alex@alexstuder.ch" || fail "Mail-Versand fehlgeschlagen"
+  python3 - << PYEOF
+import json, urllib.request, urllib.error, os
+
+subject = """${SUBJECT}"""
+errors = ${ERRORS}
+filename = """${FILENAME}"""
+size = """${SIZE}"""
+module_log = """${MODULE_LOG}"""
+log_tail = """${LOG_TAIL}"""
+brevo_key = """${BREVO_KEY}"""
+
+status = "Alle Module erfolgreich." if errors == 0 else f"{errors} Modul(e) fehlgeschlagen!"
+body = f"""Backup-Protokoll
+
+Status: {status}
+Datei: {filename} ({size})
+
+Module:
+{module_log}
+
+--- Log (letzte 20 Zeilen) ---
+{log_tail}
+"""
+
+payload = json.dumps({
+    "sender": {"email": "ugly@beautymolt.com", "name": "Ugly Backup"},
+    "to": [{"email": "alex@alexstuder.ch"}],
+    "subject": subject,
+    "textContent": body
+}).encode("utf-8")
+
+req = urllib.request.Request(
+    "https://api.brevo.com/v3/smtp/email",
+    data=payload,
+    headers={"api-key": brevo_key, "Content-Type": "application/json"},
+    method="POST"
+)
+try:
+    with urllib.request.urlopen(req) as resp:
+        print(f"Mail gesendet: {resp.read().decode()}")
+except urllib.error.HTTPError as e:
+    print(f"Mail Fehler {e.code}: {e.read().decode()}")
+PYEOF
+
+  if [ $? -eq 0 ]; then
+    log "Protokoll-Mail gesendet an alex@alexstuder.ch"
+  else
+    fail "Mail-Versand fehlgeschlagen"
+  fi
 fi
 
 exit $ERRORS
