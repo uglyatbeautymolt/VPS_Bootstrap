@@ -118,6 +118,11 @@
 <text class="ts ts-coral" x="571" y="370" text-anchor="middle">Zoho IMAP</text>
 <text class="ts ts-coral" x="571" y="386" text-anchor="middle">mail.beauty…</text>
 
+<!-- n8n → OpenClaw HTTP Hook -->
+<path d="M410 342 C370 342 200 342 168 342" fill="none" stroke="#854F0B" stroke-width="1.2" stroke-dasharray="5 3" marker-end="url(#a)"/>
+<rect x="220" y="327" width="150" height="16" rx="3" fill="#FAEEDA" opacity="0.9"/>
+<text font-size="10" fill="#633806" x="295" y="339" text-anchor="middle">HTTP Hook /hooks/agent</text>
+
 <!-- Externe Anbindungen — Rahmen + Label -->
 <rect x="56" y="420" width="568" height="88" rx="10" class="c-net-fill" stroke-width="1.2" stroke-dasharray="6 3"/>
 <text class="ts ts-gray" x="340" y="436" text-anchor="middle" font-style="italic">Externe Anbindungen</text>
