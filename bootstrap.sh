@@ -52,9 +52,11 @@ fi
 ask "Bitwarden E-Mail:"
 read -p "  > " BW_EMAIL
 
+info "Bitwarden Login..."
+bw login "$BW_EMAIL" 2>/dev/null || true
+
 info "Bitwarden Vault entsperren..."
-echo "  → Gib dein Master-Passwort ein und drücke Enter (unsichtbare Eingabe):"
-BW_SESSION=$(bw unlock "$BW_EMAIL" --raw) \
+BW_SESSION=$(bw unlock --raw) \
   || fail "Bitwarden Login fehlgeschlagen"
 
 BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
@@ -89,10 +91,8 @@ usermod -aG docker alex
 echo ""
 ask "Passwort für User 'alex':"
 while true; do
-  echo "  → Gib das Passwort ein und drücke Enter (unsichtbare Eingabe):"
-  read -s -p "    Passwort: " ALEX_PW; echo ""
-  echo "  → Bestätige das Passwort (unsichtbare Eingabe):"
-  read -s -p "    Bestätigen: " ALEX_PW2; echo ""
+  read -s -p "  Passwort: " ALEX_PW; echo ""
+  read -s -p "  Bestätigen: " ALEX_PW2; echo ""
   [ "$ALEX_PW" = "$ALEX_PW2" ] && break
   warn "Stimmen nicht überein — nochmals"
 done
