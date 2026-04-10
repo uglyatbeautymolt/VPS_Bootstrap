@@ -104,8 +104,7 @@
 <text class="ts ts-amber" x="463" y="322" text-anchor="middle">Automation</text>
 <text class="ts ts-amber" x="463" y="338" text-anchor="middle">:5678</text>
 <text class="ts ts-amber" x="463" y="354" text-anchor="middle">vol: n8n-data</text>
-<text class="ts ts-amber" x="463" y="370" text-anchor="middle">Brevo SMTP</text>
-<text class="ts ts-amber" x="463" y="386" text-anchor="middle">Zoho Empfang</text>
+<text class="ts ts-amber" x="463" y="370" text-anchor="middle">Zoho Empfang</text>
 
 <!-- Roundcube -->
 <rect x="526" y="284" width="90" height="116" rx="8" class="c-coral-fill" stroke-width="0.5"/>
@@ -143,7 +142,6 @@
 <!-- Verbindungen zu externen Diensten -->
 <line x1="115" y1="400" x2="125" y2="440" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 <line x1="115" y1="400" x2="271" y2="440" stroke="#BA7517" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="463" y1="400" x2="271" y2="440" stroke="#BA7517" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 <line x1="463" y1="400" x2="417" y2="440" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 <line x1="571" y1="400" x2="417" y2="440" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 <line x1="347" y1="400" x2="559" y2="440" stroke="#534AB7" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
