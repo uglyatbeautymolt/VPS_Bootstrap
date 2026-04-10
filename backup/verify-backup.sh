@@ -22,7 +22,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 
 source "$STACK_DIR/.env" || { echo "Fehler: .env nicht gefunden"; exit 1; }
 
-VERIFY_DIR="/tmp/backup-verify-$(date +%Y%m%d_%H%M%S)"
+VERIFY_DIR="/tmp/backup-verify-$(TZ="${TZ}" date +%Y%m%d_%H%M%S)"
 mkdir -p "$VERIFY_DIR"
 
 echo ""
@@ -76,51 +76,54 @@ else
   WORKSPACE_ORIG="$OPENCLAW_DATA/workspace"
   WORKSPACE_BACK="$TMP_CLAW/workspace"
 
-  # Workspace-Dateien vergleichen
+  # Workspace-Dateien vergleichen (sudo wegen 1000:1000 Ownership)
   for FILE in AGENTS.md SOUL.md TOOLS.md IDENTITY.md USER.md MEMORY.md HEARTBEAT.md; do
     ORIG="$WORKSPACE_ORIG/$FILE"
     BACK="$WORKSPACE_BACK/$FILE"
-    if [ ! -f "$ORIG" ] && [ ! -f "$BACK" ]; then
+    ORIG_EXISTS=$(sudo test -f "$ORIG" && echo "yes" || echo "no")
+    BACK_EXISTS=$(test -f "$BACK" && echo "yes" || echo "no")
+
+    if [ "$ORIG_EXISTS" = "no" ] && [ "$BACK_EXISTS" = "no" ]; then
       continue  # beide fehlen — OK
-    elif [ ! -f "$BACK" ]; then
+    elif [ "$BACK_EXISTS" = "no" ]; then
       warn "openclaw/$FILE: fehlt im Backup"
-    elif [ ! -f "$ORIG" ]; then
-      warn "openclaw/$FILE: nur im Backup vorhanden (Backup älter als letzte Änderung?)"
+    elif [ "$ORIG_EXISTS" = "no" ]; then
+      warn "openclaw/$FILE: nur im Backup vorhanden"
     else
-      if diff -q "$ORIG" "$BACK" &>/dev/null; then
+      if sudo diff -q "$ORIG" "$BACK" &>/dev/null; then
         ok "openclaw/$FILE: identisch"
       else
         fail "openclaw/$FILE: UNTERSCHIED"
-        diff "$ORIG" "$BACK" | head -10
+        sudo diff "$ORIG" "$BACK" | head -10
         ERRORS=$((ERRORS + 1))
       fi
     fi
   done
 
-  # Skills vergleichen
+  # Skills vergleichen (sudo wegen 1000:1000 Ownership)
   echo ""
   info "openclaw skills..."
   SKILLS_ORIG="$WORKSPACE_ORIG/skills"
   SKILLS_BACK="$WORKSPACE_BACK/skills"
 
-  if [ ! -d "$SKILLS_ORIG" ] && [ ! -d "$SKILLS_BACK" ]; then
-    warn "openclaw/skills: keine Skills vorhanden (weder live noch im Backup)"
-  elif [ ! -d "$SKILLS_BACK" ]; then
-    fail "openclaw/skills: Skills live vorhanden aber fehlen im Backup!"
-    ls "$SKILLS_ORIG"
+  SKILLS_ORIG_EXISTS=$(sudo test -d "$SKILLS_ORIG" && echo "yes" || echo "no")
+  SKILLS_BACK_EXISTS=$(test -d "$SKILLS_BACK" && echo "yes" || echo "no")
+
+  if [ "$SKILLS_ORIG_EXISTS" = "no" ] && [ "$SKILLS_BACK_EXISTS" = "no" ]; then
+    warn "openclaw/skills: keine Skills vorhanden"
+  elif [ "$SKILLS_BACK_EXISTS" = "no" ]; then
+    fail "openclaw/skills: live vorhanden aber fehlen im Backup!"
+    sudo ls "$SKILLS_ORIG"
     ERRORS=$((ERRORS + 1))
-  elif [ ! -d "$SKILLS_ORIG" ]; then
-    warn "openclaw/skills: nur im Backup vorhanden (Backup älter als letzte Änderung?)"
+  elif [ "$SKILLS_ORIG_EXISTS" = "no" ]; then
+    warn "openclaw/skills: nur im Backup vorhanden"
     ls "$SKILLS_BACK"
   else
-    # Beide vorhanden — Datei für Datei vergleichen
-    SKILL_DIFF=$(diff -rq "$SKILLS_ORIG/" "$SKILLS_BACK/" 2>/dev/null)
+    SKILL_DIFF=$(sudo diff -rq "$SKILLS_ORIG/" "$SKILLS_BACK/" 2>/dev/null)
     if [ -z "$SKILL_DIFF" ]; then
       ok "openclaw/skills: identisch"
-      # Skills auflisten
-      for SKILL in "$SKILLS_ORIG"/*/; do
-        SKILL_NAME=$(basename "$SKILL")
-        ok "  skill: $SKILL_NAME"
+      for SKILL in $(sudo ls "$SKILLS_ORIG"); do
+        ok "  skill: $SKILL"
       done
     else
       fail "openclaw/skills: UNTERSCHIED"
