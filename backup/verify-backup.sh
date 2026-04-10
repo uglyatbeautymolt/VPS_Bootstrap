@@ -8,6 +8,7 @@
 # ─────────────────────────────────────────────────────────────
 
 STACK_DIR="/home/alex/ugly-stack"
+OPENCLAW_DATA="$STACK_DIR/openclaw-data"
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
@@ -72,16 +73,19 @@ else
   mkdir -p "$TMP_CLAW"
   tar -xzf "$BACKUP_TAR" -C "$TMP_CLAW/" 2>/dev/null
 
+  WORKSPACE_ORIG="$OPENCLAW_DATA/workspace"
+  WORKSPACE_BACK="$TMP_CLAW/workspace"
+
   # Workspace-Dateien vergleichen
   for FILE in AGENTS.md SOUL.md TOOLS.md IDENTITY.md USER.md MEMORY.md HEARTBEAT.md; do
-    ORIG="$STACK_DIR/openclaw-data/workspace/$FILE"
-    BACK="$TMP_CLAW/workspace/$FILE"
+    ORIG="$WORKSPACE_ORIG/$FILE"
+    BACK="$WORKSPACE_BACK/$FILE"
     if [ ! -f "$ORIG" ] && [ ! -f "$BACK" ]; then
       continue  # beide fehlen — OK
     elif [ ! -f "$BACK" ]; then
       warn "openclaw/$FILE: fehlt im Backup"
     elif [ ! -f "$ORIG" ]; then
-      warn "openclaw/$FILE: nur im Backup vorhanden"
+      warn "openclaw/$FILE: nur im Backup vorhanden (Backup älter als letzte Änderung?)"
     else
       if diff -q "$ORIG" "$BACK" &>/dev/null; then
         ok "openclaw/$FILE: identisch"
@@ -94,12 +98,30 @@ else
   done
 
   # Skills vergleichen
-  if [ -d "$STACK_DIR/openclaw-data/workspace/skills" ]; then
-    SKILL_DIFF=$(diff -rq \
-      "$STACK_DIR/openclaw-data/workspace/skills/" \
-      "$TMP_CLAW/workspace/skills/" 2>/dev/null)
+  echo ""
+  info "openclaw skills..."
+  SKILLS_ORIG="$WORKSPACE_ORIG/skills"
+  SKILLS_BACK="$WORKSPACE_BACK/skills"
+
+  if [ ! -d "$SKILLS_ORIG" ] && [ ! -d "$SKILLS_BACK" ]; then
+    warn "openclaw/skills: keine Skills vorhanden (weder live noch im Backup)"
+  elif [ ! -d "$SKILLS_BACK" ]; then
+    fail "openclaw/skills: Skills live vorhanden aber fehlen im Backup!"
+    ls "$SKILLS_ORIG"
+    ERRORS=$((ERRORS + 1))
+  elif [ ! -d "$SKILLS_ORIG" ]; then
+    warn "openclaw/skills: nur im Backup vorhanden (Backup älter als letzte Änderung?)"
+    ls "$SKILLS_BACK"
+  else
+    # Beide vorhanden — Datei für Datei vergleichen
+    SKILL_DIFF=$(diff -rq "$SKILLS_ORIG/" "$SKILLS_BACK/" 2>/dev/null)
     if [ -z "$SKILL_DIFF" ]; then
       ok "openclaw/skills: identisch"
+      # Skills auflisten
+      for SKILL in "$SKILLS_ORIG"/*/; do
+        SKILL_NAME=$(basename "$SKILL")
+        ok "  skill: $SKILL_NAME"
+      done
     else
       fail "openclaw/skills: UNTERSCHIED"
       echo "$SKILL_DIFF"
@@ -139,9 +161,10 @@ rm -rf "$VERIFY_DIR"
 echo ""
 echo "════════════════════════════════════════════"
 if [ $ERRORS -eq 0 ]; then
-  ok "Backup ist vollständig und aktuell — Fehler: 0"
+  ok "Backup vollständig und aktuell — Fehler: 0"
 else
   fail "Verifikation abgeschlossen — Fehler: $ERRORS"
+  warn "Tipp: Erst 'backup-master.sh' ausführen, dann erneut prüfen"
 fi
 echo "════════════════════════════════════════════"
 echo ""
