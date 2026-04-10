@@ -30,7 +30,7 @@ ugly@beautymolt.com (Zoho IMAP)
   → n8n IMAP Trigger
   → JS Node (Sanitization)
   → HTTP POST http://openclaw:18789/hooks/agent
-    Header: x-openclaw-token: <OPENCLAW_HOOK_TOKEN>
+    Header: Authorization: Bearer <OPENCLAW_HOOK_TOKEN>
     Body: {"message":"...","name":"Email","wakeMode":"now"}
   → openclaw antwortet via Brevo REST API
 ```
@@ -52,23 +52,38 @@ ugly@beautymolt.com (Zoho IMAP)
 
 - `hooks` ist **Top-Level-Key** — nie unter `gateway` einbetten (→ "Unrecognized key" Fehler)
 - `bind: lan` — nie `loopback` (Dashboard setzt es manchmal zurück → prüfen)
-- Auth-Header: `x-openclaw-token` — nicht `Authorization: Bearer`
+- Auth-Header: `Authorization: Bearer <TOKEN>` — nicht `x-openclaw-token`
 
 Hook testen:
 ```bash
 docker exec n8n wget -qO- \
-  --header='x-openclaw-token: TOKEN' \
+  --header='Authorization: Bearer TOKEN' \
   --header='Content-Type: application/json' \
   --post-data='{"message":"Test","name":"Email","wakeMode":"now"}' \
   'http://openclaw:18789/hooks/agent'
 # → {"ok":true,"runId":"..."}
 ```
 
+## openclaw Debugging
+
+```bash
+# Vollständiges Gateway-Log (nicht docker logs!)
+tail -50 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log
+
+# Hook-Call testen und sofort Log prüfen
+docker exec openclaw wget -qO- http://localhost:18789/hooks/agent \
+  --header='Authorization: Bearer TOKEN' \
+  --header='Content-Type: application/json' \
+  --post-data='{"message":"Test","name":"Email","wakeMode":"now"}' \
+&& tail -10 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log
+```
+
 ## Brevo
 
 - SMTP: `a50340001@smtp-brevo.com` + `BREVO_SMTP_API_KEY` (für n8n)
-- REST: `BREVO_KEY` (xkeysib-...) für openclaw Skill + Backup-Mails
+- REST: `BREVO_KEY` (xkeysib-...) für openclaw E-Mail-Versand via curl
 - Absender: `ugly@beautymolt.com`
+- openclaw sendet Mails direkt per curl exec — kein separater Skill nötig
 - Backup-Mail JSON immer via python3 bauen — Shell-Interpolation bricht bei Sonderzeichen
 
 ## Modelle
