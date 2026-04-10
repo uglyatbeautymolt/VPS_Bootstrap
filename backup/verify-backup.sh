@@ -1,0 +1,148 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────
+#  Ugly Stack — Backup Verifikation
+#  Holt neuestes Backup von R2, entschlüsselt es und vergleicht
+#  den Inhalt mit den aktuellen Dateien auf dem VPS.
+#
+#  Verwendung: bash ~/ugly-stack/backup/verify-backup.sh
+# ─────────────────────────────────────────────────────────────
+
+STACK_DIR="/home/alex/ugly-stack"
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+ok()   { echo -e "${GREEN}[✓]${NC} $1"; }
+fail() { echo -e "${RED}[✗]${NC} $1"; }
+info() { echo -e "${BLUE}[→]${NC} $1"; }
+warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+
+source "$STACK_DIR/.env" || { echo "Fehler: .env nicht gefunden"; exit 1; }
+
+VERIFY_DIR="/tmp/backup-verify-$(date +%Y%m%d_%H%M%S)"
+mkdir -p "$VERIFY_DIR"
+
+echo ""
+echo "╔══════════════════════════════════════════╗"
+echo "║  Ugly Stack — Backup Verifikation        ║"
+echo "╚══════════════════════════════════════════╝"
+echo ""
+
+# ── Neuestes Backup von R2 holen ─────────────────────────────
+info "Suche neuestes Backup in R2..."
+LATEST=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
+  --config "$STACK_DIR/rclone/rclone.conf" 2>/dev/null \
+  | sort | tail -1 | awk '{print $2}')
+
+[ -z "$LATEST" ] && { fail "Kein Backup in R2 gefunden"; exit 1; }
+info "Backup: $LATEST"
+
+info "Lade herunter..."
+rclone copy "r2:${CF_R2_BUCKET}/backups/$LATEST" /tmp/ \
+  --config "$STACK_DIR/rclone/rclone.conf"
+ok "Download abgeschlossen"
+
+# ── Entschlüsseln + entpacken ─────────────────────────────────
+info "Entschlüssele und entpacke..."
+gpg --batch --yes \
+  --passphrase "$BACKUP_GPG_PASSWORD" \
+  --decrypt "/tmp/$LATEST" \
+  | tar -xz -C "$VERIFY_DIR/" 2>/dev/null
+ok "Entpackt nach: $VERIFY_DIR"
+rm -f "/tmp/$LATEST"
+
+echo ""
+echo "════════════════════════════════════════════"
+echo "  VERGLEICH"
+echo "════════════════════════════════════════════"
+
+ERRORS=0
+
+# ── openclaw workspace ────────────────────────────────────────
+echo ""
+info "openclaw workspace..."
+BACKUP_TAR=$(ls "$VERIFY_DIR/openclaw-data/"*.tar.gz 2>/dev/null | head -1)
+if [ -z "$BACKUP_TAR" ]; then
+  fail "openclaw: Kein tar.gz im Backup gefunden"
+  ERRORS=$((ERRORS + 1))
+else
+  TMP_CLAW="/tmp/backup-claw-$$"
+  mkdir -p "$TMP_CLAW"
+  tar -xzf "$BACKUP_TAR" -C "$TMP_CLAW/" 2>/dev/null
+
+  # Workspace-Dateien vergleichen
+  for FILE in AGENTS.md SOUL.md TOOLS.md IDENTITY.md USER.md MEMORY.md HEARTBEAT.md; do
+    ORIG="$STACK_DIR/openclaw-data/workspace/$FILE"
+    BACK="$TMP_CLAW/workspace/$FILE"
+    if [ ! -f "$ORIG" ] && [ ! -f "$BACK" ]; then
+      continue  # beide fehlen — OK
+    elif [ ! -f "$BACK" ]; then
+      warn "openclaw/$FILE: fehlt im Backup"
+    elif [ ! -f "$ORIG" ]; then
+      warn "openclaw/$FILE: nur im Backup vorhanden"
+    else
+      if diff -q "$ORIG" "$BACK" &>/dev/null; then
+        ok "openclaw/$FILE: identisch"
+      else
+        fail "openclaw/$FILE: UNTERSCHIED"
+        diff "$ORIG" "$BACK" | head -10
+        ERRORS=$((ERRORS + 1))
+      fi
+    fi
+  done
+
+  # Skills vergleichen
+  if [ -d "$STACK_DIR/openclaw-data/workspace/skills" ]; then
+    SKILL_DIFF=$(diff -rq \
+      "$STACK_DIR/openclaw-data/workspace/skills/" \
+      "$TMP_CLAW/workspace/skills/" 2>/dev/null)
+    if [ -z "$SKILL_DIFF" ]; then
+      ok "openclaw/skills: identisch"
+    else
+      fail "openclaw/skills: UNTERSCHIED"
+      echo "$SKILL_DIFF"
+      ERRORS=$((ERRORS + 1))
+    fi
+  fi
+
+  rm -rf "$TMP_CLAW"
+fi
+
+# ── n8n ───────────────────────────────────────────────────────
+echo ""
+info "n8n..."
+[ -f "$VERIFY_DIR/n8n-data/workflows-backup.json" ] \
+  && ok "n8n/workflows-backup.json: vorhanden" \
+  || { fail "n8n/workflows-backup.json: FEHLT"; ERRORS=$((ERRORS + 1)); }
+[ -f "$VERIFY_DIR/n8n-data/credentials-backup.json" ] \
+  && ok "n8n/credentials-backup.json: vorhanden" \
+  || { fail "n8n/credentials-backup.json: FEHLT"; ERRORS=$((ERRORS + 1)); }
+
+# ── nginx ─────────────────────────────────────────────────────
+echo ""
+info "nginx..."
+if diff -rq \
+  "$VERIFY_DIR/nginx/conf.d/" \
+  "$STACK_DIR/nginx/conf.d/" &>/dev/null; then
+  ok "nginx/conf.d: identisch"
+else
+  fail "nginx/conf.d: UNTERSCHIED"
+  diff -rq "$VERIFY_DIR/nginx/conf.d/" "$STACK_DIR/nginx/conf.d/"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# ── Aufräumen ─────────────────────────────────────────────────
+rm -rf "$VERIFY_DIR"
+
+echo ""
+echo "════════════════════════════════════════════"
+if [ $ERRORS -eq 0 ]; then
+  ok "Backup ist vollständig und aktuell — Fehler: 0"
+else
+  fail "Verifikation abgeschlossen — Fehler: $ERRORS"
+fi
+echo "════════════════════════════════════════════"
+echo ""
+exit $ERRORS
