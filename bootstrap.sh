@@ -200,11 +200,23 @@ grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
   || echo "backup/.www-checksum" >> "$STACK_DIR/.gitignore"
 log ".gitignore aktualisiert"
 
-# sudoers: alex darf tar auf openclaw-data ohne Passwort ausführen (für Backup)
-echo "alex ALL=(root) NOPASSWD: /bin/tar -czf * -C ${STACK_DIR}/openclaw-data ." \
-  > /etc/sudoers.d/alex-openclaw-backup
-chmod 440 /etc/sudoers.d/alex-openclaw-backup
-log "sudoers: alex darf tar auf openclaw-data ohne Passwort"
+# ── sudoers: sudo-Timeout 60 Min + Lesezugriff openclaw-data ─
+# Einmal sudo-Passwort eingeben → 60 Minuten keine weitere Abfrage
+cat > /etc/sudoers.d/alex-ugly-stack << SUDOERS
+# sudo Passwort-Timeout: 60 Minuten
+Defaults:alex timestamp_timeout=60
+
+# Backup: tar auf openclaw-data (Ownership 1000:1000 → braucht root)
+alex ALL=(root) NOPASSWD: /bin/tar -czf * -C ${STACK_DIR}/openclaw-data .
+
+# Lesen: openclaw-data Dateien inspizieren ohne Passwort
+alex ALL=(root) NOPASSWD: /bin/ls * ${STACK_DIR}/openclaw-data
+alex ALL=(root) NOPASSWD: /bin/cat ${STACK_DIR}/openclaw-data/*
+alex ALL=(root) NOPASSWD: /usr/bin/find ${STACK_DIR}/openclaw-data *
+alex ALL=(root) NOPASSWD: /usr/bin/grep -r * ${STACK_DIR}/openclaw-data/
+SUDOERS
+chmod 440 /etc/sudoers.d/alex-ugly-stack
+log "sudoers: 60 Min Timeout + openclaw-data Lesezugriff für alex"
 
 source "$STACK_DIR/.env" 2>/dev/null || true
 
