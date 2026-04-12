@@ -68,6 +68,9 @@ services:
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
       - WEBHOOK_URL=https://n8n.beautymolt.com
+      - N8N_SECURE_COOKIE=false
+      - N8N_TRUST_PROXY=true
+      - N8N_RUNNERS_ENABLED=true
       - N8N_EMAIL_MODE=smtp
       - N8N_SMTP_HOST=smtp-relay.brevo.com
       - N8N_SMTP_PORT=587
