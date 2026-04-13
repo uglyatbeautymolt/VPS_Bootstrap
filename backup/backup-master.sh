@@ -59,7 +59,6 @@ write_checksum() {
   fi
 }
 
-# Anzahl Zeilen sicher zaehlen — gibt nie Exit-Code 1 zurueck
 count_lines() {
   echo "${1}" | grep -v '^[[:space:]]*$' | wc -l || echo 0
 }
@@ -103,16 +102,13 @@ CURR_OPENCLAW=$(dir_checksum "$STACK_DIR/openclaw-data")
 CURR_N8N=$(dir_checksum "$STACK_DIR/n8n-data")
 CURR_NGINX=$(dir_checksum "$STACK_DIR/nginx/conf.d")
 CURR_WWW=$(dir_checksum "$STACK_DIR/www")
-CURR_PORTAINER=$(docker run --rm \
-  -v portainer-data:/data \
-  alpine sh -c "sha256sum /data/portainer.db 2>/dev/null | cut -d' ' -f1 || echo missing" 2>/dev/null || echo "missing")
+# Portainer: DB aendert sich laufend (Sessions) - keine Checksumme, immer gesichert
 
 PREV_ENV=$(read_checksum "env")
 PREV_OPENCLAW=$(read_checksum "openclaw")
 PREV_N8N=$(read_checksum "n8n")
 PREV_NGINX=$(read_checksum "nginx")
 PREV_WWW=$(read_checksum "www")
-PREV_PORTAINER=$(read_checksum "portainer")
 
 # ─────────────────────────────────────────────────────────────
 # .env PRUEFEN + GITHUB PUSH
@@ -140,6 +136,8 @@ sep
 
 # ─────────────────────────────────────────────────────────────
 # BACKUP-KANDIDATEN PRUEFEN
+# Portainer wird nicht gecheckt — DB aendert sich laufend
+# Portainer wird immer gesichert wenn ein Backup stattfindet
 # ─────────────────────────────────────────────────────────────
 info "Backup-Kandidaten pruefen..."
 
@@ -149,7 +147,7 @@ IS_SUNDAY=false
 declare -A CHANGED
 declare -A STATUS
 
-for KEY in openclaw n8n nginx www portainer; do
+for KEY in openclaw n8n nginx www; do
   CURR_VAR="CURR_${KEY^^}"
   PREV_VAR="PREV_${KEY^^}"
   CURR="${!CURR_VAR}"
@@ -164,11 +162,14 @@ for KEY in openclaw n8n nginx www portainer; do
     info "  $KEY: unveraendert"
   fi
 done
+# Portainer: immer im Backup enthalten wenn Backup laeuft
+STATUS[portainer]="immer gesichert (DB)"
+info "  portainer: immer gesichert"
 
 # Backup noetig?
 NEEDS_BACKUP=false
 CHANGED_LIST=""
-for KEY in openclaw n8n nginx www portainer; do
+for KEY in openclaw n8n nginx www; do
   if [ "${CHANGED[$KEY]}" = "true" ]; then
     NEEDS_BACKUP=true
     CHANGED_LIST="$CHANGED_LIST $KEY"
@@ -262,16 +263,16 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
     BACKUP_STATUS="Backup erstellt: $FILENAME ($BACKUP_SIZE)"
   fi
 
-  # Checksummen aktualisieren
+  # Checksummen aktualisieren (ohne portainer)
   write_checksum "env" "$CURR_ENV"
   write_checksum "openclaw" "$CURR_OPENCLAW"
   write_checksum "n8n" "$CURR_N8N"
   write_checksum "nginx" "$CURR_NGINX"
   write_checksum "www" "$CURR_WWW"
-  write_checksum "portainer" "$CURR_PORTAINER"
 
 else
   BACKUP_STATUS="Kein Backup noetig - nichts geaendert"
+  STATUS[portainer]="kein Backup - nichts geaendert"
   info "Nichts geaendert - kein R2-Backup"
 fi
 
