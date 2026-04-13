@@ -13,12 +13,13 @@ CHECKSUMS_FILE="$STACK_DIR/backup/.checksums"
 DATE=$(date '+%Y-%m-%d_%H-%M-%S')
 DAY_OF_WEEK=$(date '+%u')  # 7 = Sonntag
 
-log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [✓] $1" | tee -a "$LOG"; }
-fail() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [✗] $1" | tee -a "$LOG"; }
-info() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [→] $1" | tee -a "$LOG"; }
+log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [OK] $1" | tee -a "$LOG"; }
+fail() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [!!] $1" | tee -a "$LOG"; }
+info() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [--] $1" | tee -a "$LOG"; }
+sep()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [  ] ----------------------------------------" | tee -a "$LOG"; }
 
 echo "" >> "$LOG"
-info "════════ Backup Start ════════"
+info "======== Backup Start ========"
 
 source "$STACK_DIR/.env"
 
@@ -26,7 +27,6 @@ source "$STACK_DIR/.env"
 # HILFSFUNKTIONEN
 # ─────────────────────────────────────────────────────────────
 
-# Checksumme eines Verzeichnisses berechnen
 dir_checksum() {
   local dir="$1"
   if [ ! -d "$dir" ] || [ -z "$(ls -A $dir 2>/dev/null)" ]; then
@@ -36,21 +36,18 @@ dir_checksum() {
   find "$dir" -type f | sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1
 }
 
-# Checksumme einer Datei berechnen
 file_checksum() {
   local file="$1"
   [ ! -f "$file" ] && echo "missing" && return
   sha256sum "$file" | cut -d' ' -f1
 }
 
-# Checksumme aus gespeicherter Datei lesen
 read_checksum() {
   local key="$1"
   [ ! -f "$CHECKSUMS_FILE" ] && echo "" && return
   grep "^${key}=" "$CHECKSUMS_FILE" 2>/dev/null | cut -d'=' -f2
 }
 
-# Checksumme in Datei schreiben
 write_checksum() {
   local key="$1"
   local value="$2"
@@ -62,19 +59,34 @@ write_checksum() {
   fi
 }
 
-# Mail via Brevo REST API senden
 send_mail() {
   local subject="$1"
   local body="$2"
-  curl -s -o /dev/null -X POST "https://api.brevo.com/v3/smtp/email" \
+  # jq escaped alle Sonderzeichen korrekt fuer JSON
+  local payload
+  payload=$(jq -n \
+    --arg from_name "Ugly Backup" \
+    --arg from_email "ugly@beautymolt.com" \
+    --arg to_email "alex@alexstuder.ch" \
+    --arg subject "$subject" \
+    --arg body "$body" \
+    '{
+      sender: {name: $from_name, email: $from_email},
+      to: [{email: $to_email}],
+      subject: $subject,
+      textContent: $body
+    }')
+  local http_code
+  http_code=$(curl -s -o /tmp/brevo_response.txt -w "%{http_code}" \
+    -X POST "https://api.brevo.com/v3/smtp/email" \
     -H "api-key: ${BREVO_KEY}" \
     -H "Content-Type: application/json" \
-    -d "{
-      \"sender\": {\"name\": \"Ugly Backup\", \"email\": \"ugly@beautymolt.com\"},
-      \"to\": [{\"email\": \"alex@alexstuder.ch\"}],
-      \"subject\": \"${subject}\",
-      \"textContent\": \"${body}\"
-    }"
+    -d "$payload")
+  if [ "$http_code" = "201" ]; then
+    log "Status-Mail gesendet (HTTP $http_code)"
+  else
+    fail "Status-Mail fehlgeschlagen (HTTP $http_code): $(cat /tmp/brevo_response.txt)"
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -99,11 +111,12 @@ PREV_WWW=$(read_checksum "www")
 PREV_PORTAINER=$(read_checksum "portainer")
 
 # ─────────────────────────────────────────────────────────────
-# .env PRÜFEN + GITHUB PUSH
+# .env PRUEFEN + GITHUB PUSH
 # ─────────────────────────────────────────────────────────────
+info ".env pruefen..."
 ENV_STATUS=""
 if [ "$CURR_ENV" != "$PREV_ENV" ]; then
-  info ".env geändert → GPG + GitHub push..."
+  info ".env geaendert - GPG verschluesseln + GitHub push..."
   gpg --batch --yes \
     --passphrase "$BACKUP_GPG_PASSWORD" \
     --symmetric --cipher-algo AES256 \
@@ -112,16 +125,20 @@ if [ "$CURR_ENV" != "$PREV_ENV" ]; then
   git add .env.gpg
   git diff --cached --quiet || git commit -m "update: .env sync $(date '+%Y-%m-%d %H:%M')"
   git push origin main
-  log ".env → GitHub gepusht"
-  ENV_STATUS="geändert → GitHub push OK"
+  log ".env.gpg nach GitHub gepusht"
+  ENV_STATUS="geaendert - .env.gpg nach GitHub gepusht"
 else
-  info ".env nicht geändert — kein Push"
-  ENV_STATUS="nicht geändert → kein Push"
+  info ".env nicht geaendert - kein Push noetig"
+  ENV_STATUS="nicht geaendert - kein Push"
 fi
 
+sep
+
 # ─────────────────────────────────────────────────────────────
-# ÄNDERUNGEN FESTSTELLEN
+# BACKUP-KANDIDATEN PRUEFEN
 # ─────────────────────────────────────────────────────────────
+info "Backup-Kandidaten pruefen..."
+
 IS_SUNDAY=false
 [ "$DAY_OF_WEEK" = "7" ] && IS_SUNDAY=true
 
@@ -135,22 +152,30 @@ for KEY in openclaw n8n nginx www portainer; do
   PREV="${!PREV_VAR}"
   if [ "$CURR" != "$PREV" ] || [ -z "$PREV" ]; then
     CHANGED[$KEY]=true
-    STATUS[$KEY]="geändert → wird gesichert"
+    STATUS[$KEY]="geaendert - wird gesichert"
+    info "  $KEY: geaendert"
   else
     CHANGED[$KEY]=false
-    STATUS[$KEY]="nicht geändert → übersprungen"
+    STATUS[$KEY]="unveraendert - uebersprungen"
+    info "  $KEY: unveraendert"
   fi
 done
 
-# Backup nötig?
+# Backup noetig?
 NEEDS_BACKUP=false
+CHANGED_LIST=""
 for KEY in openclaw n8n nginx www portainer; do
-  [ "${CHANGED[$KEY]}" = "true" ] && NEEDS_BACKUP=true
+  if [ "${CHANGED[$KEY]}" = "true" ]; then
+    NEEDS_BACKUP=true
+    CHANGED_LIST="$CHANGED_LIST $KEY"
+  fi
 done
 $IS_SUNDAY && NEEDS_BACKUP=true
 
+sep
+
 # ─────────────────────────────────────────────────────────────
-# BACKUP AUSFÜHREN (wenn nötig)
+# BACKUP AUSFUEHREN (wenn noetig)
 # ─────────────────────────────────────────────────────────────
 BACKUP_STATUS=""
 BACKUP_SIZE=""
@@ -160,10 +185,10 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
 
   if $IS_SUNDAY; then
     FILENAME="backup-WEEKLY-${DATE}.tar.gz.gpg"
-    info "Sonntags-Pflichtbackup → $FILENAME"
+    info "Sonntags-Pflichtbackup - erstelle: $FILENAME"
   else
     FILENAME="backup-${DATE}.tar.gz.gpg"
-    info "Änderungen festgestellt → $FILENAME"
+    info "Geaenderte Kandidaten:${CHANGED_LIST} - erstelle: $FILENAME"
   fi
 
   rm -rf "$STAGING"
@@ -173,15 +198,15 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
     NAME=$(basename "$MODULE" .sh)
     info "Modul: $NAME"
     if STAGING="$STAGING" STACK_DIR="$STACK_DIR" bash "$MODULE" >> "$LOG" 2>&1; then
-      log "$NAME — OK"
+      log "$NAME - OK"
     else
-      fail "$NAME — FEHLER"
+      fail "$NAME - FEHLER"
       ERRORS=$((ERRORS + 1))
       STATUS[$NAME]="FEHLER beim Backup"
     fi
   done
 
-  info "Erstelle verschlüsseltes Backup..."
+  info "Erstelle verschluesseltes Archiv..."
   tar -czf - -C "$STAGING" . | \
     gpg --batch --yes --symmetric \
         --cipher-algo AES256 \
@@ -189,7 +214,7 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
         -o "/tmp/$FILENAME"
 
   BACKUP_SIZE=$(du -sh "/tmp/$FILENAME" | cut -f1)
-  log "Backup erstellt: $FILENAME ($BACKUP_SIZE)"
+  log "Archiv erstellt: $FILENAME ($BACKUP_SIZE)"
 
   info "Upload zu Cloudflare R2..."
   rclone copy "/tmp/$FILENAME" "r2:${CF_R2_BUCKET}/backups/" \
@@ -209,7 +234,7 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
     for F in $TO_DELETE; do
       rclone delete "r2:${CF_R2_BUCKET}/backups/$F" \
         --config "$STACK_DIR/rclone/rclone.conf"
-      log "Gelöscht: $F"
+      log "Geloescht (alt): $F"
     done
   fi
 
@@ -223,7 +248,7 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
     for F in $TO_DELETE; do
       rclone delete "r2:${CF_R2_BUCKET}/backups/$F" \
         --config "$STACK_DIR/rclone/rclone.conf"
-      log "Gelöscht (WEEKLY alt): $F"
+      log "Geloescht (WEEKLY alt): $F"
     done
   fi
 
@@ -242,39 +267,57 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
   write_checksum "portainer" "$CURR_PORTAINER"
 
 else
-  BACKUP_STATUS="Kein Backup nötig — nichts geändert"
-  info "Nichts geändert — kein Backup"
+  BACKUP_STATUS="Kein Backup noetig - nichts geaendert"
+  info "Nichts geaendert - kein R2-Backup"
 fi
 
-# Log kürzen
+# Log kuerzen
 tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+
+sep
 
 # ─────────────────────────────────────────────────────────────
 # STATUS-MAIL SENDEN
 # ─────────────────────────────────────────────────────────────
+info "Status-Mail senden..."
+
 if [ $ERRORS -eq 0 ]; then
-  SUBJECT="Ugly Stack Backup — $(date '+%Y-%m-%d') — OK"
+  SUBJECT="Ugly Stack Backup - $(date '+%Y-%m-%d') - OK"
 else
-  SUBJECT="Ugly Stack Backup — $(date '+%Y-%m-%d') — FEHLER ($ERRORS)"
+  SUBJECT="Ugly Stack Backup - $(date '+%Y-%m-%d') - FEHLER ($ERRORS)"
 fi
 
-BODY="Ugly Stack Backup-Report\n$(date '+%Y-%m-%d %H:%M:%S')\n"
-BODY+="════════════════════════════\n\n"
-BODY+=".env:\n  $ENV_STATUS\n\n"
-BODY+="Backup-Kandidaten:\n"
-for KEY in openclaw n8n nginx www portainer; do
-  BODY+="  $KEY: ${STATUS[$KEY]}\n"
-done
-BODY+="\nR2-Backup:\n  $BACKUP_STATUS\n"
+MAIL_BODY="Ugly Stack Backup-Report
+$(date '+%Y-%m-%d %H:%M:%S')
+========================================
+
+.env / GitHub:
+  $ENV_STATUS
+
+----------------------------------------
+Backup-Kandidaten (R2):
+  openclaw:  ${STATUS[openclaw]}
+  n8n:       ${STATUS[n8n]}
+  nginx:     ${STATUS[nginx]}
+  www:       ${STATUS[www]}
+  portainer: ${STATUS[portainer]}
+
+----------------------------------------
+R2-Backup:
+  $BACKUP_STATUS"
+
 if [ $ERRORS -gt 0 ]; then
-  BODY+="\nFEHLER: $ERRORS Module fehlgeschlagen — Log prüfen:\n"
-  BODY+="  tail -50 $LOG\n"
+  MAIL_BODY="$MAIL_BODY
+
+FEHLER: $ERRORS Module fehlgeschlagen
+  Log pruefen: tail -50 $LOG"
 else
-  BODY+="\nFehler: keine\n"
+  MAIL_BODY="$MAIL_BODY
+
+Fehler: keine"
 fi
 
-send_mail "$SUBJECT" "$BODY"
-log "Status-Mail gesendet"
+send_mail "$SUBJECT" "$MAIL_BODY"
 
-info "════════ Backup Ende — Fehler: $ERRORS ════════"
+info "======== Backup Ende - Fehler: $ERRORS ========"
 exit $ERRORS
