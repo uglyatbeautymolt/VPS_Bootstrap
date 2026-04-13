@@ -126,11 +126,14 @@ services:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: unless-stopped
+    environment:
+      - PORTAINER_INSECURE_HTTP_ENABLED=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer-data:/data
     networks:
       - ugly-net
+    command: --http-enabled
 
 volumes:
   portainer-data:
