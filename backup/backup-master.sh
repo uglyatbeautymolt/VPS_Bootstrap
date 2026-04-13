@@ -1,7 +1,7 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────
 #  Ugly Stack — Backup Master
-#  Cron: 0 3 * * * /home/alex/ugly-stack/backup/backup-master.sh
+#  Cron: 0 3 * * * bash /home/alex/ugly-stack/backup/backup-master.sh
 # ─────────────────────────────────────────────────────────────
 set -e
 
@@ -9,258 +9,272 @@ STACK_DIR="/home/alex/ugly-stack"
 MODULES_DIR="$STACK_DIR/backup/modules"
 STAGING="/tmp/ugly-backup-staging"
 LOG="$STACK_DIR/backup/backup.log"
-DATE=$(TZ="${TZ:-Europe/Zurich}" date '+%Y-%m-%d_%H-%M-%S')
-FILENAME="backup-${DATE}.tar.gz.gpg"
+CHECKSUMS_FILE="$STACK_DIR/backup/.checksums"
+DATE=$(date '+%Y-%m-%d_%H-%M-%S')
+DAY_OF_WEEK=$(date '+%u')  # 7 = Sonntag
 
-log()  { echo "[$(TZ="${TZ:-Europe/Zurich}" date '+%Y-%m-%d %H:%M:%S')] [✓] $1" | tee -a "$LOG"; }
-fail() { echo "[$(TZ="${TZ:-Europe/Zurich}" date '+%Y-%m-%d %H:%M:%S')] [✗] $1" | tee -a "$LOG"; }
-info() { echo "[$(TZ="${TZ:-Europe/Zurich}" date '+%Y-%m-%d %H:%M:%S')] [→] $1" | tee -a "$LOG"; }
+log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [✓] $1" | tee -a "$LOG"; }
+fail() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [✗] $1" | tee -a "$LOG"; }
+info() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [→] $1" | tee -a "$LOG"; }
 
 echo "" >> "$LOG"
 info "════════ Backup Start ════════"
 
 source "$STACK_DIR/.env"
 
-# Staging
-rm -rf "$STAGING"
-mkdir -p "$STAGING"/{openclaw-data,n8n-data,nginx,www}
+# ─────────────────────────────────────────────────────────────
+# HILFSFUNKTIONEN
+# ─────────────────────────────────────────────────────────────
 
-# Module ausführen
-ERRORS=0
-MODULE_LOG=""
-for MODULE in "$MODULES_DIR"/*.sh; do
-  NAME=$(basename "$MODULE" .sh)
-  info "Modul: $NAME"
-  MODULE_OUTPUT=$(STAGING="$STAGING" STACK_DIR="$STACK_DIR" bash "$MODULE" 2>&1)
-  echo "$MODULE_OUTPUT" >> "$LOG"
-  if echo "$MODULE_OUTPUT" | grep -qi "FEHLER\|permission denied"; then
-    fail "$NAME — FEHLER"
-    MODULE_LOG="${MODULE_LOG}\n❌ $NAME: FEHLER"
-    ERRORS=$((ERRORS + 1))
+# Checksumme eines Verzeichnisses berechnen
+dir_checksum() {
+  local dir="$1"
+  if [ ! -d "$dir" ] || [ -z "$(ls -A $dir 2>/dev/null)" ]; then
+    echo "empty"
+    return
+  fi
+  find "$dir" -type f | sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1
+}
+
+# Checksumme einer Datei berechnen
+file_checksum() {
+  local file="$1"
+  [ ! -f "$file" ] && echo "missing" && return
+  sha256sum "$file" | cut -d' ' -f1
+}
+
+# Checksumme aus gespeicherter Datei lesen
+read_checksum() {
+  local key="$1"
+  [ ! -f "$CHECKSUMS_FILE" ] && echo "" && return
+  grep "^${key}=" "$CHECKSUMS_FILE" 2>/dev/null | cut -d'=' -f2
+}
+
+# Checksumme in Datei schreiben
+write_checksum() {
+  local key="$1"
+  local value="$2"
+  touch "$CHECKSUMS_FILE"
+  if grep -q "^${key}=" "$CHECKSUMS_FILE" 2>/dev/null; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$CHECKSUMS_FILE"
   else
-    log "$NAME — OK"
-    MODULE_LOG="${MODULE_LOG}\n✅ $NAME: OK"
+    echo "${key}=${value}" >> "$CHECKSUMS_FILE"
+  fi
+}
+
+# Mail via Brevo REST API senden
+send_mail() {
+  local subject="$1"
+  local body="$2"
+  curl -s -o /dev/null -X POST "https://api.brevo.com/v3/smtp/email" \
+    -H "api-key: ${BREVO_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "{
+      \"sender\": {\"name\": \"Ugly Backup\", \"email\": \"ugly@beautymolt.com\"},
+      \"to\": [{\"email\": \"alex@alexstuder.ch\"}],
+      \"subject\": \"${subject}\",
+      \"textContent\": \"${body}\"
+    }"
+}
+
+# ─────────────────────────────────────────────────────────────
+# CHECKSUMMEN BERECHNEN
+# ─────────────────────────────────────────────────────────────
+info "Checksummen berechnen..."
+
+CURR_ENV=$(file_checksum "$STACK_DIR/.env")
+CURR_OPENCLAW=$(dir_checksum "$STACK_DIR/openclaw-data")
+CURR_N8N=$(dir_checksum "$STACK_DIR/n8n-data")
+CURR_NGINX=$(dir_checksum "$STACK_DIR/nginx/conf.d")
+CURR_WWW=$(dir_checksum "$STACK_DIR/www")
+CURR_PORTAINER=$(docker run --rm \
+  -v portainer-data:/data \
+  alpine sh -c "sha256sum /data/portainer.db 2>/dev/null | cut -d' ' -f1 || echo missing" 2>/dev/null || echo "missing")
+
+PREV_ENV=$(read_checksum "env")
+PREV_OPENCLAW=$(read_checksum "openclaw")
+PREV_N8N=$(read_checksum "n8n")
+PREV_NGINX=$(read_checksum "nginx")
+PREV_WWW=$(read_checksum "www")
+PREV_PORTAINER=$(read_checksum "portainer")
+
+# ─────────────────────────────────────────────────────────────
+# .env PRÜFEN + GITHUB PUSH
+# ─────────────────────────────────────────────────────────────
+ENV_STATUS=""
+if [ "$CURR_ENV" != "$PREV_ENV" ]; then
+  info ".env geändert → GPG + GitHub push..."
+  gpg --batch --yes \
+    --passphrase "$BACKUP_GPG_PASSWORD" \
+    --symmetric --cipher-algo AES256 \
+    -o "$STACK_DIR/.env.gpg" "$STACK_DIR/.env"
+  cd "$STACK_DIR"
+  git add .env.gpg
+  git diff --cached --quiet || git commit -m "update: .env sync $(date '+%Y-%m-%d %H:%M')"
+  git push origin main
+  log ".env → GitHub gepusht"
+  ENV_STATUS="geändert → GitHub push OK"
+else
+  info ".env nicht geändert — kein Push"
+  ENV_STATUS="nicht geändert → kein Push"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# ÄNDERUNGEN FESTSTELLEN
+# ─────────────────────────────────────────────────────────────
+IS_SUNDAY=false
+[ "$DAY_OF_WEEK" = "7" ] && IS_SUNDAY=true
+
+declare -A CHANGED
+declare -A STATUS
+
+for KEY in openclaw n8n nginx www portainer; do
+  CURR_VAR="CURR_${KEY^^}"
+  PREV_VAR="PREV_${KEY^^}"
+  CURR="${!CURR_VAR}"
+  PREV="${!PREV_VAR}"
+  if [ "$CURR" != "$PREV" ] || [ -z "$PREV" ]; then
+    CHANGED[$KEY]=true
+    STATUS[$KEY]="geändert → wird gesichert"
+  else
+    CHANGED[$KEY]=false
+    STATUS[$KEY]="nicht geändert → übersprungen"
   fi
 done
 
-# tar.gz + GPG verschlüsseln
-info "Erstelle verschlüsseltes Backup..."
-tar -czf - -C "$STAGING" . | \
-  gpg --batch --yes --symmetric \
-      --cipher-algo AES256 \
-      --passphrase "$BACKUP_GPG_PASSWORD" \
-      -o "/tmp/$FILENAME"
+# Backup nötig?
+NEEDS_BACKUP=false
+for KEY in openclaw n8n nginx www portainer; do
+  [ "${CHANGED[$KEY]}" = "true" ] && NEEDS_BACKUP=true
+done
+$IS_SUNDAY && NEEDS_BACKUP=true
 
-SIZE=$(du -sh "/tmp/$FILENAME" | cut -f1)
-log "Backup erstellt: $FILENAME ($SIZE)"
+# ─────────────────────────────────────────────────────────────
+# BACKUP AUSFÜHREN (wenn nötig)
+# ─────────────────────────────────────────────────────────────
+BACKUP_STATUS=""
+BACKUP_SIZE=""
+ERRORS=0
 
-# Zu R2 hochladen
-info "Upload zu Cloudflare R2..."
-rclone copy "/tmp/$FILENAME" "r2:${CF_R2_BUCKET}/backups/" \
-  --config "$STACK_DIR/rclone/rclone.conf"
-log "Upload OK"
+if [ "$NEEDS_BACKUP" = "true" ]; then
 
-# Aufräumen
-rm -f "/tmp/$FILENAME"
-rm -rf "$STAGING"
-
-# Letzte 7 Backups behalten
-BACKUPS=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
-  --config "$STACK_DIR/rclone/rclone.conf" \
-  | sort | awk '{print $2}')
-COUNT=$(echo "$BACKUPS" | grep -c . || true)
-if [ "$COUNT" -gt 7 ]; then
-  TO_DELETE=$(echo "$BACKUPS" | head -n $((COUNT - 7)))
-  for F in $TO_DELETE; do
-    rclone delete "r2:${CF_R2_BUCKET}/backups/$F" \
-      --config "$STACK_DIR/rclone/rclone.conf"
-    log "Gelöscht: $F"
-  done
-fi
-
-tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
-info "════════ Backup Ende — Fehler: $ERRORS ════════"
-
-# ── Verifikation (1 Min nach Upload) ─────────────────────────
-info "Warte 60s vor Verifikation..."
-sleep 60
-
-info "Starte Verifikation..."
-VERIFY_LOG=""
-VERIFY_ERRORS=0
-
-# Backup von R2 holen und entpacken
-VERIFY_DIR="/tmp/ugly-verify-$$"
-mkdir -p "$VERIFY_DIR"
-
-LATEST=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
-  --config "$STACK_DIR/rclone/rclone.conf" 2>/dev/null \
-  | sort | tail -1 | awk '{print $2}')
-
-if [ -z "$LATEST" ]; then
-  VERIFY_LOG="❌ Kein Backup in R2 gefunden"
-  VERIFY_ERRORS=1
-else
-  rclone copy "r2:${CF_R2_BUCKET}/backups/$LATEST" /tmp/ \
-    --config "$STACK_DIR/rclone/rclone.conf" 2>/dev/null
-
-  gpg --batch --yes \
-    --passphrase "$BACKUP_GPG_PASSWORD" \
-    --decrypt "/tmp/$LATEST" \
-    | tar -xz -C "$VERIFY_DIR/" 2>/dev/null
-  rm -f "/tmp/$LATEST"
-
-  VERIFY_LOG="Backup: $LATEST\n"
-
-  # openclaw tar.gz prüfen
-  BACKUP_TAR=$(ls "$VERIFY_DIR/openclaw-data/"*.tar.gz 2>/dev/null | head -1)
-  if [ -z "$BACKUP_TAR" ]; then
-    VERIFY_LOG="${VERIFY_LOG}❌ openclaw: kein tar.gz\n"
-    VERIFY_ERRORS=$((VERIFY_ERRORS + 1))
+  if $IS_SUNDAY; then
+    FILENAME="backup-WEEKLY-${DATE}.tar.gz.gpg"
+    info "Sonntags-Pflichtbackup → $FILENAME"
   else
-    TMP_CLAW="/tmp/verify-claw-$$"
-    mkdir -p "$TMP_CLAW"
-    tar -xzf "$BACKUP_TAR" -C "$TMP_CLAW/" 2>/dev/null
+    FILENAME="backup-${DATE}.tar.gz.gpg"
+    info "Änderungen festgestellt → $FILENAME"
+  fi
 
-    WORKSPACE_ORIG="$STACK_DIR/openclaw-data/workspace"
-    WORKSPACE_BACK="$TMP_CLAW/workspace"
+  rm -rf "$STAGING"
+  mkdir -p "$STAGING"/{openclaw-data,n8n-data,nginx,www,portainer}
 
-    # Workspace-Dateien
-    for FILE in AGENTS.md SOUL.md TOOLS.md IDENTITY.md USER.md; do
-      ORIG="$WORKSPACE_ORIG/$FILE"
-      BACK="$WORKSPACE_BACK/$FILE"
-      BACK_EXISTS=false; [ -f "$BACK" ] && BACK_EXISTS=true
-      ORIG_EXISTS=false; sudo test -f "$ORIG" 2>/dev/null && ORIG_EXISTS=true
-
-      if [ "$ORIG_EXISTS" = false ] && [ "$BACK_EXISTS" = false ]; then
-        continue
-      elif [ "$BACK_EXISTS" = false ]; then
-        VERIFY_LOG="${VERIFY_LOG}⚠️  $FILE: fehlt im Backup\n"
-      elif [ "$ORIG_EXISTS" = false ]; then
-        VERIFY_LOG="${VERIFY_LOG}⚠️  $FILE: nur im Backup\n"
-      elif sudo diff -q "$ORIG" "$BACK" &>/dev/null; then
-        VERIFY_LOG="${VERIFY_LOG}✅ $FILE: identisch\n"
-      else
-        VERIFY_LOG="${VERIFY_LOG}❌ $FILE: UNTERSCHIED\n"
-        VERIFY_ERRORS=$((VERIFY_ERRORS + 1))
-      fi
-    done
-
-    # Skills
-    SKILLS_ORIG="$WORKSPACE_ORIG/skills"
-    SKILLS_BACK="$WORKSPACE_BACK/skills"
-    SKILLS_ORIG_EXISTS=false; sudo test -d "$SKILLS_ORIG" && SKILLS_ORIG_EXISTS=true
-    SKILLS_BACK_EXISTS=false; [ -d "$SKILLS_BACK" ] && SKILLS_BACK_EXISTS=true
-
-    if [ "$SKILLS_ORIG_EXISTS" = true ] && [ "$SKILLS_BACK_EXISTS" = true ]; then
-      if sudo diff -rq "$SKILLS_ORIG/" "$SKILLS_BACK/" &>/dev/null; then
-        SKILL_LIST=$(sudo ls "$SKILLS_ORIG" | tr '\n' ' ')
-        VERIFY_LOG="${VERIFY_LOG}✅ skills: identisch ($SKILL_LIST)\n"
-      else
-        VERIFY_LOG="${VERIFY_LOG}❌ skills: UNTERSCHIED\n"
-        VERIFY_ERRORS=$((VERIFY_ERRORS + 1))
-      fi
-    elif [ "$SKILLS_BACK_EXISTS" = false ] && [ "$SKILLS_ORIG_EXISTS" = true ]; then
-      VERIFY_LOG="${VERIFY_LOG}❌ skills: fehlen im Backup!\n"
-      VERIFY_ERRORS=$((VERIFY_ERRORS + 1))
+  for MODULE in "$MODULES_DIR"/*.sh; do
+    NAME=$(basename "$MODULE" .sh)
+    info "Modul: $NAME"
+    if STAGING="$STAGING" STACK_DIR="$STACK_DIR" bash "$MODULE" >> "$LOG" 2>&1; then
+      log "$NAME — OK"
+    else
+      fail "$NAME — FEHLER"
+      ERRORS=$((ERRORS + 1))
+      STATUS[$NAME]="FEHLER beim Backup"
     fi
+  done
 
-    rm -rf "$TMP_CLAW"
+  info "Erstelle verschlüsseltes Backup..."
+  tar -czf - -C "$STAGING" . | \
+    gpg --batch --yes --symmetric \
+        --cipher-algo AES256 \
+        --passphrase "$BACKUP_GPG_PASSWORD" \
+        -o "/tmp/$FILENAME"
+
+  BACKUP_SIZE=$(du -sh "/tmp/$FILENAME" | cut -f1)
+  log "Backup erstellt: $FILENAME ($BACKUP_SIZE)"
+
+  info "Upload zu Cloudflare R2..."
+  rclone copy "/tmp/$FILENAME" "r2:${CF_R2_BUCKET}/backups/" \
+    --config "$STACK_DIR/rclone/rclone.conf"
+  log "Upload OK"
+
+  rm -f "/tmp/$FILENAME"
+  rm -rf "$STAGING"
+
+  # Normale Backups: letzte 7 behalten
+  NORMAL_BACKUPS=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
+    --config "$STACK_DIR/rclone/rclone.conf" \
+    | sort | awk '{print $2}' | grep -v 'WEEKLY')
+  COUNT=$(echo "$NORMAL_BACKUPS" | grep -c . || true)
+  if [ "$COUNT" -gt 7 ]; then
+    TO_DELETE=$(echo "$NORMAL_BACKUPS" | head -n $((COUNT - 7)))
+    for F in $TO_DELETE; do
+      rclone delete "r2:${CF_R2_BUCKET}/backups/$F" \
+        --config "$STACK_DIR/rclone/rclone.conf"
+      log "Gelöscht: $F"
+    done
   fi
 
-  # n8n
-  [ -f "$VERIFY_DIR/n8n-data/workflows-backup.json" ] \
-    && VERIFY_LOG="${VERIFY_LOG}✅ n8n workflows: vorhanden\n" \
-    || { VERIFY_LOG="${VERIFY_LOG}❌ n8n workflows: FEHLT\n"; VERIFY_ERRORS=$((VERIFY_ERRORS + 1)); }
-  [ -f "$VERIFY_DIR/n8n-data/credentials-backup.json" ] \
-    && VERIFY_LOG="${VERIFY_LOG}✅ n8n credentials: vorhanden\n" \
-    || { VERIFY_LOG="${VERIFY_LOG}❌ n8n credentials: FEHLT\n"; VERIFY_ERRORS=$((VERIFY_ERRORS + 1)); }
+  # WEEKLY Backups: letzte 4 behalten
+  WEEKLY_BACKUPS=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
+    --config "$STACK_DIR/rclone/rclone.conf" \
+    | sort | awk '{print $2}' | grep 'WEEKLY')
+  COUNT=$(echo "$WEEKLY_BACKUPS" | grep -c . || true)
+  if [ "$COUNT" -gt 4 ]; then
+    TO_DELETE=$(echo "$WEEKLY_BACKUPS" | head -n $((COUNT - 4)))
+    for F in $TO_DELETE; do
+      rclone delete "r2:${CF_R2_BUCKET}/backups/$F" \
+        --config "$STACK_DIR/rclone/rclone.conf"
+      log "Gelöscht (WEEKLY alt): $F"
+    done
+  fi
 
-  # nginx
-  if diff -rq "$VERIFY_DIR/nginx/conf.d/" "$STACK_DIR/nginx/conf.d/" &>/dev/null; then
-    VERIFY_LOG="${VERIFY_LOG}✅ nginx conf: identisch\n"
+  if $IS_SUNDAY; then
+    BACKUP_STATUS="WEEKLY-Backup erstellt: $FILENAME ($BACKUP_SIZE)"
   else
-    VERIFY_LOG="${VERIFY_LOG}❌ nginx conf: UNTERSCHIED\n"
-    VERIFY_ERRORS=$((VERIFY_ERRORS + 1))
+    BACKUP_STATUS="Backup erstellt: $FILENAME ($BACKUP_SIZE)"
   fi
 
-  rm -rf "$VERIFY_DIR"
-fi
+  # Checksummen aktualisieren
+  write_checksum "env" "$CURR_ENV"
+  write_checksum "openclaw" "$CURR_OPENCLAW"
+  write_checksum "n8n" "$CURR_N8N"
+  write_checksum "nginx" "$CURR_NGINX"
+  write_checksum "www" "$CURR_WWW"
+  write_checksum "portainer" "$CURR_PORTAINER"
 
-if [ $VERIFY_ERRORS -eq 0 ]; then
-  log "Verifikation OK"
-  VERIFY_SUMMARY="✅ Verifikation erfolgreich"
 else
-  fail "Verifikation: $VERIFY_ERRORS Fehler"
-  VERIFY_SUMMARY="❌ Verifikation: $VERIFY_ERRORS Fehler"
-  ERRORS=$((ERRORS + VERIFY_ERRORS))
+  BACKUP_STATUS="Kein Backup nötig — nichts geändert"
+  info "Nichts geändert — kein Backup"
 fi
 
-# ── Protokoll-Mail via Brevo ──────────────────────────────────
-if [ -n "$BREVO_KEY" ]; then
-  if [ "$ERRORS" -eq 0 ]; then
-    SUBJECT="✅ Backup + Verifikation OK — ${DATE}"
-  else
-    SUBJECT="❌ Backup/Verifikation FEHLER (${ERRORS}) — ${DATE}"
-  fi
+# Log kürzen
+tail -500 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 
-  LOG_TAIL=$(tail -20 "$LOG")
-
-  python3 - << PYEOF
-import json, urllib.request, urllib.error
-
-subject = """${SUBJECT}"""
-errors = ${ERRORS}
-filename = """${FILENAME}"""
-size = """${SIZE}"""
-module_log = """${MODULE_LOG}"""
-verify_summary = """${VERIFY_SUMMARY}"""
-verify_log = """${VERIFY_LOG}"""
-log_tail = """${LOG_TAIL}"""
-brevo_key = """${BREVO_KEY}"""
-
-status = "Alle Prüfungen erfolgreich." if errors == 0 else f"{errors} Fehler aufgetreten!"
-body = f"""Backup-Protokoll
-
-Status: {status}
-Datei: {filename} ({size})
-
-━━━ Module ━━━
-{module_log}
-
-━━━ Verifikation ━━━
-{verify_summary}
-{verify_log}
-
-━━━ Log (letzte 20 Zeilen) ━━━
-{log_tail}
-"""
-
-payload = json.dumps({
-    "sender": {"email": "ugly@beautymolt.com", "name": "Ugly Backup"},
-    "to": [{"email": "alex@alexstuder.ch"}],
-    "subject": subject,
-    "textContent": body
-}).encode("utf-8")
-
-req = urllib.request.Request(
-    "https://api.brevo.com/v3/smtp/email",
-    data=payload,
-    headers={"api-key": brevo_key, "Content-Type": "application/json"},
-    method="POST"
-)
-try:
-    with urllib.request.urlopen(req) as resp:
-        print(f"Mail gesendet: {resp.read().decode()}")
-except urllib.error.HTTPError as e:
-    print(f"Mail Fehler {e.code}: {e.read().decode()}")
-PYEOF
-
-  if [ $? -eq 0 ]; then
-    log "Protokoll-Mail gesendet an alex@alexstuder.ch"
-  else
-    fail "Mail-Versand fehlgeschlagen"
-  fi
+# ─────────────────────────────────────────────────────────────
+# STATUS-MAIL SENDEN
+# ─────────────────────────────────────────────────────────────
+if [ $ERRORS -eq 0 ]; then
+  SUBJECT="Ugly Stack Backup — $(date '+%Y-%m-%d') — OK"
+else
+  SUBJECT="Ugly Stack Backup — $(date '+%Y-%m-%d') — FEHLER ($ERRORS)"
 fi
 
+BODY="Ugly Stack Backup-Report\n$(date '+%Y-%m-%d %H:%M:%S')\n"
+BODY+="════════════════════════════\n\n"
+BODY+=".env:\n  $ENV_STATUS\n\n"
+BODY+="Backup-Kandidaten:\n"
+for KEY in openclaw n8n nginx www portainer; do
+  BODY+="  $KEY: ${STATUS[$KEY]}\n"
+done
+BODY+="\nR2-Backup:\n  $BACKUP_STATUS\n"
+if [ $ERRORS -gt 0 ]; then
+  BODY+="\nFEHLER: $ERRORS Module fehlgeschlagen — Log prüfen:\n"
+  BODY+="  tail -50 $LOG\n"
+else
+  BODY+="\nFehler: keine\n"
+fi
+
+send_mail "$SUBJECT" "$BODY"
+log "Status-Mail gesendet"
+
+info "════════ Backup Ende — Fehler: $ERRORS ════════"
 exit $ERRORS

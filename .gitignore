@@ -7,4 +7,5 @@ www/
 rclone.conf
 backup/www-sync.sh
 backup/.www-checksum
+backup/.checksums
 roundcube-data/
