@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260413_1315
+# Version: V.20260413_1320
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260413_1315"
+BOOTSTRAP_VERSION="V.20260413_1320"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -365,13 +365,6 @@ if [ -n "$LATEST" ]; then
   [ -d "$STAGING/www" ] && \
     cp -r "$STAGING/www/." "$STACK_DIR/www/"
 
-  # portainer — zwischenspeichern, nach Stack-Start einspielen
-  if [ -f "$STAGING/portainer/portainer-data.tar.gz" ]; then
-    mkdir -p /tmp/portainer-restore
-    cp "$STAGING/portainer/portainer-data.tar.gz" /tmp/portainer-restore/
-    log "Portainer Backup bereitgestellt — wird nach Stack-Start eingespielt"
-  fi
-
   rm -rf "$STAGING"
   log "Backup wiederhergestellt aus: $LATEST"
 else
@@ -456,20 +449,32 @@ chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
 
-# Portainer Backup einspielen (Volume existiert jetzt)
-if [ -f "/tmp/portainer-restore/portainer-data.tar.gz" ]; then
-  info "Portainer Backup einspielen..."
-  docker stop portainer 2>/dev/null || true
-  docker run --rm \
-    -v portainer-data:/target \
-    -v /tmp/portainer-restore:/backup \
-    alpine sh -c "rm -rf /target/* && tar -xzf /backup/portainer-data.tar.gz -C /target"
-  docker start portainer 2>/dev/null || true
-  rm -rf /tmp/portainer-restore
-  log "Portainer Backup wiederhergestellt"
-fi
+# ── Portainer Admin-Passwort via API setzen ───────────────────
+# Portainer speichert nichts im Backup das nicht in 30s neu konfiguriert
+# werden kann. Stattdessen wird das Passwort aus .env gesetzt.
+source "$STACK_DIR/.env"
+PORTAINER_ADMIN_PASSWORD="${PORTAINER_ADMIN_PASSWORD:-Ugly\$Portainer\$VPSDocker}"
 
-# n8n Workflows + Credentials importieren + aktivieren
+info "Portainer Admin-Passwort setzen — warte bis Portainer bereit..."
+for i in $(seq 1 24); do
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+    http://localhost:9000/api/status 2>/dev/null || echo "000")
+  if [ "$HTTP_CODE" = "200" ]; then
+    log "Portainer ist bereit"
+    break
+  fi
+  warn "Portainer noch nicht bereit — warte 5s ($i/24)"
+  sleep 5
+done
+
+# Admin-User anlegen (nur beim ersten Start — schlägt fehl wenn bereits vorhanden)
+curl -s -X POST http://localhost:9000/api/users/admin/init \
+  -H "Content-Type: application/json" \
+  -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" \
+  > /dev/null 2>&1 || true
+log "Portainer Admin: admin / Passwort aus .env (PORTAINER_ADMIN_PASSWORD)"
+
+# ── n8n Workflows + Credentials importieren + aktivieren ─────
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren — warte bis n8n bereit..."
   for i in $(seq 1 24); do
@@ -525,6 +530,11 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Stack: $STACK_DIR"
 echo "  User:  alex (sudo, docker)"
+echo ""
+echo "  Portainer Login:"
+echo "    URL:      https://portainer.beautymolt.com"
+echo "    User:     admin"
+echo "    Passwort: aus .env → PORTAINER_ADMIN_PASSWORD"
 echo ""
 echo "  Zeitplan (UTC):"
 echo "    02:00 — Backup → R2 + .env → GitHub + Status-Mail"
