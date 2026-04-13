@@ -17,8 +17,6 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
-# Punkte-Animation für nicht-interaktive Hintergrundprozesse
-# NICHT für bw login verwenden — der braucht ein echtes Terminal
 bw_spinner() {
   local pid=$1
   local text=$2
@@ -70,10 +68,6 @@ read -s -p "  > " BW_PASSWORD; echo ""
 
 export BW_PASSWORD
 
-# ── Schritt 1a: Login bei Bitwarden ──────────────────────────
-# bw login läuft im Vordergrund direkt auf dem Terminal.
-# Bei einem neuen Gerät sendet Bitwarden automatisch einen OTP-Code
-# per E-Mail — bw login zeigt dann selbst einen Prompt dafür.
 info "Verbinde mit Bitwarden..."
 bw logout &>/dev/null || true
 
@@ -87,7 +81,6 @@ unset BW_PASSWORD
 
 log "Bitwarden Login erfolgreich"
 
-# ── Schritt 1b: Secrets aus dem Vault holen ──────────────────
 info "Secrets aus Bitwarden holen..."
 
 BACKUP_GPG_PASSWORD=$(bw get item "BACKUP_GPG_PASSWORD" \
@@ -103,7 +96,6 @@ GITHUB_TOKEN=$(bw get item "GITHUB_TOKEN" \
 [ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "null" ] \
   && fail "GITHUB_TOKEN nicht in Bitwarden gefunden"
 
-# ── Schritt 1c: Bitwarden sperren ────────────────────────────
 bw lock --session "$BW_SESSION" &>/dev/null || true
 unset BW_SESSION BW_EMAIL
 
@@ -137,9 +129,9 @@ unset ALEX_PW ALEX_PW2
 log "User 'alex' bereit (sudo, docker)"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 3 — SYSTEM + TOOLS + DOCKER
+# SCHRITT 3 — SYSTEM + TOOLS + DOCKER + UNATTENDED-UPGRADES
 # ─────────────────────────────────────────────────────────────
-info "Schritt 3/7 — System + Docker installieren..."
+info "Schritt 3/7 — System + Docker + Auto-Updates installieren..."
 
 apt-get update -qq
 apt-get upgrade -y -qq
@@ -147,7 +139,8 @@ apt-get install -y -qq \
   curl git unzip jq gpg \
   ca-certificates gnupg \
   lsb-release apt-transport-https \
-  software-properties-common rclone
+  software-properties-common rclone \
+  unattended-upgrades update-notifier-common
 
 if command -v docker &>/dev/null; then
   warn "Docker bereits installiert"
@@ -156,6 +149,48 @@ else
   systemctl enable docker && systemctl start docker
   log "Docker installiert"
 fi
+
+# ── unattended-upgrades konfigurieren ────────────────────────
+# Eigene Konfiguration in 51er-Datei (überschreibt 50er-Defaults)
+cat > /etc/apt/apt.conf.d/51ugly-upgrades << 'UPGRADES'
+// Ugly Stack — Auto-Update Konfiguration
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}";
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+    "${distro_id}:${distro_codename}-updates";
+    "Docker:${distro_codename}";
+};
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+Unattended-Upgrade::Automatic-Reboot-Time "03:30";
+UPGRADES
+
+# apt-daily timer auf 03:00 setzen (systemd override)
+mkdir -p /etc/systemd/system/apt-daily.timer.d
+cat > /etc/systemd/system/apt-daily.timer.d/override.conf << 'TIMER'
+[Timer]
+OnCalendar=
+OnCalendar=*-*-* 03:00
+RandomizedDelaySec=0
+TIMER
+
+mkdir -p /etc/systemd/system/apt-daily-upgrade.timer.d
+cat > /etc/systemd/system/apt-daily-upgrade.timer.d/override.conf << 'TIMER'
+[Timer]
+OnCalendar=
+OnCalendar=*-*-* 03:00
+RandomizedDelaySec=0
+TIMER
+
+systemctl daemon-reload
+systemctl enable unattended-upgrades
+systemctl restart unattended-upgrades
+log "unattended-upgrades konfiguriert (täglich 03:00, Reboot 03:30)"
 
 log "System bereit"
 
@@ -178,7 +213,6 @@ gpg --batch --yes \
   --passphrase "$BACKUP_GPG_PASSWORD" \
   --decrypt .env.gpg > .env
 
-# BACKUP_GPG_PASSWORD idempotent in .env eintragen (kein Duplikat)
 if ! grep -q "^BACKUP_GPG_PASSWORD=" "$STACK_DIR/.env"; then
   echo "BACKUP_GPG_PASSWORD=${BACKUP_GPG_PASSWORD}" >> "$STACK_DIR/.env"
 else
@@ -186,7 +220,6 @@ else
 fi
 log ".env entschlüsselt"
 
-# Alle Scripts ausführbar machen (GitHub push_files setzt kein +x)
 chmod +x "$STACK_DIR/bootstrap.sh"
 chmod +x "$STACK_DIR/set-secret.sh"
 chmod +x "$STACK_DIR/backup/backup-master.sh"
@@ -205,7 +238,6 @@ grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
   || echo "backup/.www-checksum" >> "$STACK_DIR/.gitignore"
 log ".gitignore aktualisiert"
 
-# ── sudoers: sudo-Timeout 60 Min + Lesezugriff openclaw-data ─
 cat > /etc/sudoers.d/alex-ugly-stack << SUDOERS
 # sudo Passwort-Timeout: 60 Minuten
 Defaults:alex timestamp_timeout=60
@@ -224,7 +256,6 @@ log "sudoers: 60 Min Timeout + openclaw-data Lesezugriff für alex"
 
 source "$STACK_DIR/.env" 2>/dev/null || true
 
-# Basis openclaw.json nur erstellen wenn noch keine vorhanden
 if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   cat > "$STACK_DIR/openclaw-data/openclaw.json" << CLAWCONFIG
 {
@@ -330,7 +361,6 @@ else
   warn "Kein Backup gefunden — frischer Start"
 fi
 
-# Post-Restore: openclaw.json prüfen und fixieren
 info "openclaw.json prüfen und korrigieren..."
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   python3 << PYFIX
@@ -379,7 +409,6 @@ PYFIX
   log "openclaw.json geprüft"
 fi
 
-# OpenClaw Token aus Config in .env synchronisieren
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   RESTORED_TOKEN=$(python3 -c "
 import json
@@ -410,7 +439,6 @@ chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
 
-# n8n Workflows + Credentials importieren
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren — warte bis n8n bereit..."
   for i in $(seq 1 24); do
@@ -429,7 +457,6 @@ if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   log "n8n Workflows + Credentials importiert"
 fi
 
-# SearXNG JSON API aktivieren
 if [ -f "$STACK_DIR/searxng-data/settings.yml" ]; then
   if ! grep -q "^\s*- json" "$STACK_DIR/searxng-data/settings.yml"; then
     sed -i 's/^\s*- html$/  - html\n  - json/' "$STACK_DIR/searxng-data/settings.yml"
@@ -445,11 +472,20 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
-# Backup-Cron: absoluter Pfad + bash — backup-master erledigt auch .env-Sync
+# Zeitplan:
+# 02:00 — Backup (inkl. .env sync + Status-Mail)
+# 02:30 — Watchtower (Container-Updates, via docker-compose Schedule)
+# 03:00 — unattended-upgrades (System + Docker Engine)
+# 03:30 — Automatischer Neustart falls Kernel-Update nötig
+
+# Backup-Cron
 (crontab -u alex -l 2>/dev/null; \
-  echo "0 3 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
+  echo "0 2 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
   | crontab -u alex -
-log "Backup-Cron eingerichtet (täglich 03:00 — inkl. .env sync + Status-Mail)"
+log "Backup-Cron eingerichtet (täglich 02:00)"
+
+# Watchtower Schedule in docker-compose ist bereits auf 02:30 UTC gesetzt
+# (0 30 2 * * * im WATCHTOWER_SCHEDULE Format: Sekunde Minute Stunde ...)
 
 ufw default deny incoming
 ufw default allow outgoing
@@ -464,7 +500,12 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Stack: $STACK_DIR"
 echo "  User:  alex (sudo, docker)"
-echo "  Backup: täglich 03:00 → R2 (inkl. .env sync + Status-Mail)"
+echo ""
+echo "  Zeitplan (UTC):"
+echo "    02:00 — Backup → R2 + .env → GitHub + Status-Mail"
+echo "    02:30 — Watchtower → Container-Updates"
+echo "    03:00 — unattended-upgrades → System + Docker Engine"
+echo "    03:30 — Automatischer Neustart (falls Kernel-Update)"
 echo ""
 echo "  Services:"
 echo "    claw.beautymolt.com      → OpenClaw"
