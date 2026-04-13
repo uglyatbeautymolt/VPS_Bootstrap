@@ -101,6 +101,25 @@ services:
     networks:
       - ugly-net
 
+  watchtower:
+    image: nickfedor/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_NO_STARTUP_MESSAGE=true
+      - WATCHTOWER_NOTIFICATIONS=email
+      - WATCHTOWER_NOTIFICATION_EMAIL_FROM=ugly@beautymolt.com
+      - WATCHTOWER_NOTIFICATION_EMAIL_TO=alex@alexstuder.ch
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER=smtp-relay.brevo.com
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PORT=587
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_USER=${BREVO_SMTP_USER}
+      - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${BREVO_SMTP_API_KEY}
+    command: openclaw
+
 networks:
   ugly-net:
     driver: bridge
