@@ -2,6 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
+# Version: V.20260413_1303
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -28,10 +29,13 @@ bw_spinner() {
   echo ""
 }
 
+BOOTSTRAP_VERSION="V.20260413_1303"
+
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║ Ugly Stack — Bootstrap                   ║"
 echo "║ beautymolt.com                           ║"
+echo "║ ${BOOTSTRAP_VERSION}                  ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -488,6 +492,7 @@ log "Firewall konfiguriert"
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║ Installation abgeschlossen!              ║"
+echo "║ ${BOOTSTRAP_VERSION}                  ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 echo "  Stack: $STACK_DIR"
