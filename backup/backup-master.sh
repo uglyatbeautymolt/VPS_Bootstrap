@@ -59,10 +59,14 @@ write_checksum() {
   fi
 }
 
+# Anzahl Zeilen sicher zaehlen — gibt nie Exit-Code 1 zurueck
+count_lines() {
+  echo "${1}" | grep -v '^[[:space:]]*$' | wc -l || echo 0
+}
+
 send_mail() {
   local subject="$1"
   local body="$2"
-  # jq escaped alle Sonderzeichen korrekt fuer JSON
   local payload
   payload=$(jq -n \
     --arg from_name "Ugly Backup" \
@@ -227,8 +231,8 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
   # Normale Backups: letzte 7 behalten
   NORMAL_BACKUPS=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
     --config "$STACK_DIR/rclone/rclone.conf" \
-    | sort | awk '{print $2}' | grep -v 'WEEKLY')
-  COUNT=$(echo "$NORMAL_BACKUPS" | grep -c . || true)
+    | sort | awk '{print $2}' | grep -v 'WEEKLY' || true)
+  COUNT=$(count_lines "$NORMAL_BACKUPS")
   if [ "$COUNT" -gt 7 ]; then
     TO_DELETE=$(echo "$NORMAL_BACKUPS" | head -n $((COUNT - 7)))
     for F in $TO_DELETE; do
@@ -241,8 +245,8 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
   # WEEKLY Backups: letzte 4 behalten
   WEEKLY_BACKUPS=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
     --config "$STACK_DIR/rclone/rclone.conf" \
-    | sort | awk '{print $2}' | grep 'WEEKLY')
-  COUNT=$(echo "$WEEKLY_BACKUPS" | grep -c . || true)
+    | sort | awk '{print $2}' | grep 'WEEKLY' || true)
+  COUNT=$(count_lines "$WEEKLY_BACKUPS")
   if [ "$COUNT" -gt 4 ]; then
     TO_DELETE=$(echo "$WEEKLY_BACKUPS" | head -n $((COUNT - 4)))
     for F in $TO_DELETE; do
