@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260413_1310
+# Version: V.20260413_1315
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260413_1310"
+BOOTSTRAP_VERSION="V.20260413_1315"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -365,8 +365,7 @@ if [ -n "$LATEST" ]; then
   [ -d "$STAGING/www" ] && \
     cp -r "$STAGING/www/." "$STACK_DIR/www/"
 
-  # portainer — Volume wird nach Stack-Start befüllt (Docker muss laufen)
-  # Backup wird zwischengespeichert und nach Stack-Start eingespielt
+  # portainer — zwischenspeichern, nach Stack-Start einspielen
   if [ -f "$STAGING/portainer/portainer-data.tar.gz" ]; then
     mkdir -p /tmp/portainer-restore
     cp "$STAGING/portainer/portainer-data.tar.gz" /tmp/portainer-restore/
@@ -470,7 +469,7 @@ if [ -f "/tmp/portainer-restore/portainer-data.tar.gz" ]; then
   log "Portainer Backup wiederhergestellt"
 fi
 
-# n8n Workflows + Credentials importieren
+# n8n Workflows + Credentials importieren + aktivieren
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren — warte bis n8n bereit..."
   for i in $(seq 1 24); do
@@ -487,6 +486,9 @@ if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   docker exec n8n n8n import:credentials --input=/tmp/credentials-backup.json
   rm -f "$STACK_DIR/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/credentials-backup.json"
   log "n8n Workflows + Credentials importiert"
+  # Alle Workflows aktivieren — IMAP Trigger läuft sonst nach Import nicht
+  docker exec n8n n8n workflow activate --all 2>/dev/null || true
+  log "n8n Workflows aktiviert (IMAP Trigger aktiv)"
 fi
 
 if [ -f "$STACK_DIR/searxng-data/settings.yml" ]; then
