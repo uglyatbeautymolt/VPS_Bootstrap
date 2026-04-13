@@ -13,6 +13,7 @@
 | n8n.beautymolt.com | n8n |
 | www.beautymolt.com | nginx Webserver |
 | mail.beautymolt.com | Roundcube |
+| portainer.beautymolt.com | Portainer (Docker Management) |
 
 ## Docker Netzwerk
 
@@ -30,7 +31,10 @@ nginx :80  (Reverse Proxy)
    ├──► searxng   :8080    (search.beautymolt.com)
    ├──► n8n       :5678    (n8n.beautymolt.com)
    ├──► nginx www          (www.beautymolt.com)
-   └──► roundcube :80      (mail.beautymolt.com)
+   ├──► roundcube :80      (mail.beautymolt.com)
+   └──► portainer :9000    (portainer.beautymolt.com)
+
+watchtower  — kein HTTP, nur Docker Socket
 ```
 
 | Container | Interner Host | Port | Netzwerk |
@@ -41,8 +45,8 @@ nginx :80  (Reverse Proxy)
 | searxng | searxng | 8080 | ugly-net |
 | n8n | n8n | 5678 | ugly-net |
 | roundcube | roundcube | 80 | ugly-net |
-
-Container kommunizieren intern über den Hostnamen (z.B. `http://searxng:8080`). Kein Container ist direkt vom Host oder Internet erreichbar.
+| portainer | portainer | 9000 | ugly-net |
+| watchtower | watchtower | — | ugly-net |
 
 ## Schnellstart — Neuinstallation
 
@@ -77,22 +81,32 @@ Folgende Secrets müssen in der **`.env`** hinterlegt sein (verschlüsselt als `
 | `N8N_ENCRYPTION_KEY` | n8n Encryption Key (32 Zeichen) |
 | `ZOHO_SMTP_USER` | Zoho Mail Login E-Mail |
 | `ZOHO_SMTP_PASSWORD` | Zoho SMTP Passwort |
-| `BREVO_SMTP_USER` | Brevo Login E-Mail |
-| `BREVO_SMTP_API_KEY` | Brevo API Key (Versand) |
+| `BREVO_SMTP_USER` | Brevo SMTP Login (a50340001@smtp-brevo.com) |
+| `BREVO_SMTP_API_KEY` | Brevo SMTP API Key (xsmtpsib-...) |
+| `BREVO_KEY` | Brevo REST API Key (xkeysib-...) |
 | `BACKUP_GPG_PASSWORD` | Passwort für Backup-Verschlüsselung |
 | `CF_R2_ACCESS_KEY` | R2 Access Key |
 | `CF_R2_SECRET_KEY` | R2 Secret Key |
 | `CF_R2_BUCKET` | R2 Bucket Name |
 | `CF_R2_ENDPOINT` | R2 Endpoint URL |
 
+## Automatische Updates — Zeitplan (UTC)
+
+| Zeit | Was |
+|------|-----|
+| 02:00 | Backup → R2 + .env → GitHub + Status-Mail |
+| 02:30 | Watchtower → Container-Images |
+| 03:00 | unattended-upgrades → Ubuntu + Docker Engine |
+| 03:30 | Automatischer Neustart falls Kernel-Update |
+
 ## Wichtige Befehle
 
 ```bash
 cd ~/ugly-stack
 
-# Secret aktualisieren (.env + Cloudflare gleichzeitig)
-./set-secret.sh TELEGRAM_BOT_TOKEN "neuer-token"
-./set-secret.sh                    # interaktiv
+# Secret aktualisieren
+bash set-secret.sh TELEGRAM_BOT_TOKEN "neuer-token"
+bash set-secret.sh                    # interaktiv
 
 # Stack verwalten
 docker compose ps
@@ -105,21 +119,27 @@ docker exec -it openclaw bash
 docker exec -it n8n sh
 
 # Backup manuell
-./backup/backup-master.sh
+bash backup/backup-master.sh
 
 # Restore
-./backup/restore/restore-master.sh list
-./backup/restore/restore-master.sh
-./backup/restore/restore-master.sh n8n
+bash backup/restore/restore-master.sh list
+bash backup/restore/restore-master.sh
+bash backup/restore/restore-master.sh n8n
+
+# Watchtower manuell auslösen
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  nickfedor/watchtower:latest --run-once openclaw searxng nginx roundcube
 ```
 
 ## Backup
 
-- Täglich 03:00 automatisch via Cron
+- Täglich 02:00 UTC via Cron
+- Checksummen-basiert — nur bei Änderungen wird R2-Backup erstellt
+- Sonntags: WEEKLY-Backup unabhängig von Änderungen
 - GPG AES256 verschlüsselt → Cloudflare R2
-- Letzte 7 Backups werden behalten
-- OpenClaw: `openclaw backup create --verify` (eingebaut)
-- n8n: Workflows + Credentials als JSON
+- 7 normale + 4 WEEKLY Backups werden behalten
+- .env: bei Änderung als .env.gpg → GitHub gepusht
+- Status-Mail nach jedem Lauf via Brevo
 
 ## Dokumentation
 
@@ -144,6 +164,7 @@ Neuen Container hinzufügen: **[backup/NEUES_MODUL.md](./backup/NEUES_MODUL.md)*
 ├── www/                      ← Volume
 └── backup/
     ├── backup-master.sh
+    ├── .checksums            ← Checksummen (gitignored)
     ├── modules/
     └── restore/
 ```

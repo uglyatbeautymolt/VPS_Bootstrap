@@ -12,6 +12,8 @@ Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
 | n8n | n8n.beautymolt.com | 5678 |
 | nginx | www.beautymolt.com | 80 |
 | roundcube | mail.beautymolt.com | 80 |
+| portainer | portainer.beautymolt.com | 9000 (HTTP intern) |
+| watchtower | — | — |
 | cloudflared | — | — |
 
 Docker Bridge-Netzwerk: **ugly-net**
@@ -40,8 +42,9 @@ Body: `{"message":"...","name":"Email","wakeMode":"now"}`
 ## Brevo
 
 - `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via **Brevo Skill**
-- `BREVO_SMTP_API_KEY` (xsmtpsib-...): n8n SMTP
+- `BREVO_SMTP_API_KEY` (xsmtpsib-...): n8n SMTP + Watchtower SMTP
 - Absender immer: `ugly@beautymolt.com` (Name: Ugly)
+- Backup Status-Mail: `backup-master.sh` → Brevo REST API → alex@alexstuder.ch
 
 ## Modelle
 
@@ -50,13 +53,35 @@ Wechseln nur via CLI — Dashboard-Dropdown hat Bug.
 
 ## Backup
 
-Täglich 03:00 → R2 (GPG AES256), 7 Backups, danach Verifikation + Mail an alex@alexstuder.ch
+Täglich 02:00 UTC via Cron → backup-master.sh
+- Checksummen-basiert: nur bei Änderungen wird R2-Backup erstellt
+- .env: bei Änderung GPG verschlüsseln → .env.gpg → GitHub push
+- Sonntags: WEEKLY-Backup unabhängig von Änderungen (4 Wochen Rotation)
+- Normale Backups: 7 Stück behalten
+- Status-Mail nach jedem Lauf via Brevo REST API
+
 Manuell: `bash backup/backup-master.sh`
-Verify: `bash backup/verify-backup.sh`
-Skills in `openclaw-data/workspace/skills/` → im Backup enthalten.
+Checksummen: `backup/.checksums` (in .gitignore)
 openclaw-data Ownership: 1000:1000 → sudo nötig für Lesen/Schreiben.
+
+## Automatische Updates — Zeitplan (UTC)
+
+| Zeit | Was |
+|------|-----|
+| 02:00 | Backup + .env sync + Status-Mail |
+| 02:30 | Watchtower — Container-Images (openclaw, searxng, nginx, roundcube) |
+| 03:00 | unattended-upgrades — Ubuntu Security + Docker Engine |
+| 03:30 | Automatischer Neustart falls Kernel-Update nötig |
+
+## Portainer
+
+- URL: https://portainer.beautymolt.com
+- HTTP intern (Port 9000) — nginx Proxy
+- TRUSTED_ORIGINS=portainer.beautymolt.com (CSRF-Fix für Reverse Proxy)
+- Volume: portainer-data (named volume, im Backup enthalten)
 
 ## Bootstrap
 
 Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP falls neues Gerät), Passwort für alex.
-Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 60min.
+Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 60min,
+unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00.
