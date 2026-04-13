@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260413_1303
+# Version: V.20260413_1310
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260413_1303"
+BOOTSTRAP_VERSION="V.20260413_1310"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -338,6 +338,7 @@ if [ -n "$LATEST" ]; then
 
   rm -f "/tmp/$LATEST"
 
+  # n8n
   mkdir -p "$STACK_DIR/n8n-data"
   [ -f "$STAGING/n8n-data/workflows-backup.json" ] && \
     cp "$STAGING/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/"
@@ -345,6 +346,7 @@ if [ -n "$LATEST" ]; then
     cp "$STAGING/n8n-data/credentials-backup.json" "$STACK_DIR/n8n-data/"
   chown -R 1000:1000 "$STACK_DIR/n8n-data"
 
+  # openclaw
   if ls "$STAGING/openclaw-data/"*.tar.gz &>/dev/null; then
     mkdir -p "$STACK_DIR/openclaw-data"
     tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
@@ -353,13 +355,23 @@ if [ -n "$LATEST" ]; then
     log "OpenClaw Backup wiederhergestellt"
   fi
 
+  # nginx
   mkdir -p "$STACK_DIR/nginx/conf.d"
   [ -d "$STAGING/nginx/conf.d" ] && \
     cp -r "$STAGING/nginx/conf.d/." "$STACK_DIR/nginx/conf.d/"
 
+  # www
   mkdir -p "$STACK_DIR/www"
   [ -d "$STAGING/www" ] && \
     cp -r "$STAGING/www/." "$STACK_DIR/www/"
+
+  # portainer — Volume wird nach Stack-Start befüllt (Docker muss laufen)
+  # Backup wird zwischengespeichert und nach Stack-Start eingespielt
+  if [ -f "$STAGING/portainer/portainer-data.tar.gz" ]; then
+    mkdir -p /tmp/portainer-restore
+    cp "$STAGING/portainer/portainer-data.tar.gz" /tmp/portainer-restore/
+    log "Portainer Backup bereitgestellt — wird nach Stack-Start eingespielt"
+  fi
 
   rm -rf "$STAGING"
   log "Backup wiederhergestellt aus: $LATEST"
@@ -445,6 +457,20 @@ chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
 
+# Portainer Backup einspielen (Volume existiert jetzt)
+if [ -f "/tmp/portainer-restore/portainer-data.tar.gz" ]; then
+  info "Portainer Backup einspielen..."
+  docker stop portainer 2>/dev/null || true
+  docker run --rm \
+    -v portainer-data:/target \
+    -v /tmp/portainer-restore:/backup \
+    alpine sh -c "rm -rf /target/* && tar -xzf /backup/portainer-data.tar.gz -C /target"
+  docker start portainer 2>/dev/null || true
+  rm -rf /tmp/portainer-restore
+  log "Portainer Backup wiederhergestellt"
+fi
+
+# n8n Workflows + Credentials importieren
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren — warte bis n8n bereit..."
   for i in $(seq 1 24); do
