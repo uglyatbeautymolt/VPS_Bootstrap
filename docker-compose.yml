@@ -120,6 +120,19 @@ services:
       - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${BREVO_SMTP_API_KEY}
     command: openclaw searxng nginx roundcube
 
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - ugly-net
+
+volumes:
+  portainer-data:
+
 networks:
   ugly-net:
     driver: bridge
