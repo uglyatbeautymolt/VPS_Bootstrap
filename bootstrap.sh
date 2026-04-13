@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260413_1320
+# Version: V.20260413_1325
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260413_1320"
+BOOTSTRAP_VERSION="V.20260413_1325"
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -449,30 +449,35 @@ chown -R 1000:1000 "$STACK_DIR/openclaw-data"
 chown -R 1000:1000 "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
 
-# ── Portainer Admin-Passwort via API setzen ───────────────────
-# Portainer speichert nichts im Backup das nicht in 30s neu konfiguriert
-# werden kann. Stattdessen wird das Passwort aus .env gesetzt.
+# ── Portainer Admin-Passwort via Container-IP setzen ─────────
+# localhost:9000 ist vom Host nicht erreichbar — Container-IP verwenden
 source "$STACK_DIR/.env"
 PORTAINER_ADMIN_PASSWORD="${PORTAINER_ADMIN_PASSWORD:-Ugly\$Portainer\$VPSDocker}"
 
-info "Portainer Admin-Passwort setzen — warte bis Portainer bereit..."
-for i in $(seq 1 24); do
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-    http://localhost:9000/api/status 2>/dev/null || echo "000")
-  if [ "$HTTP_CODE" = "200" ]; then
-    log "Portainer ist bereit"
-    break
-  fi
-  warn "Portainer noch nicht bereit — warte 5s ($i/24)"
-  sleep 5
-done
+info "Portainer Admin-Passwort setzen..."
+PORTAINER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' portainer 2>/dev/null || echo "")
 
-# Admin-User anlegen (nur beim ersten Start — schlägt fehl wenn bereits vorhanden)
-curl -s -X POST http://localhost:9000/api/users/admin/init \
-  -H "Content-Type: application/json" \
-  -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" \
-  > /dev/null 2>&1 || true
-log "Portainer Admin: admin / Passwort aus .env (PORTAINER_ADMIN_PASSWORD)"
+if [ -n "$PORTAINER_IP" ]; then
+  # Warten bis Portainer API antwortet
+  for i in $(seq 1 24); do
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+      "http://${PORTAINER_IP}:9000/api/status" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "200" ]; then
+      log "Portainer API bereit"
+      break
+    fi
+    warn "Portainer noch nicht bereit — warte 5s ($i/24)"
+    sleep 5
+  done
+  # Admin-User anlegen (schlägt still fehl wenn bereits vorhanden)
+  curl -s -X POST "http://${PORTAINER_IP}:9000/api/users/admin/init" \
+    -H "Content-Type: application/json" \
+    -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" \
+    > /dev/null 2>&1 || true
+  log "Portainer Admin gesetzt: admin / PORTAINER_ADMIN_PASSWORD"
+else
+  warn "Portainer Container-IP nicht gefunden — Passwort manuell setzen"
+fi
 
 # ── n8n Workflows + Credentials importieren + aktivieren ─────
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
@@ -534,7 +539,7 @@ echo ""
 echo "  Portainer Login:"
 echo "    URL:      https://portainer.beautymolt.com"
 echo "    User:     admin"
-echo "    Passwort: aus .env → PORTAINER_ADMIN_PASSWORD"
+echo "    Passwort: Ugly\$Portainer\$VPSDocker"
 echo ""
 echo "  Zeitplan (UTC):"
 echo "    02:00 — Backup → R2 + .env → GitHub + Status-Mail"
