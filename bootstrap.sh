@@ -113,8 +113,8 @@ else
   log "User 'alex' angelegt"
 fi
 
+# Nur sudo hier — docker-Gruppe wird nach Docker-Installation in Schritt 3 gesetzt
 usermod -aG sudo alex
-usermod -aG docker alex
 
 echo ""
 ask "Passwort für User 'alex':"
@@ -126,7 +126,7 @@ while true; do
 done
 echo "alex:$ALEX_PW" | chpasswd
 unset ALEX_PW ALEX_PW2
-log "User 'alex' bereit (sudo, docker)"
+log "User 'alex' bereit (sudo)"
 
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 3 — SYSTEM + TOOLS + DOCKER + UNATTENDED-UPGRADES
@@ -150,8 +150,11 @@ else
   log "Docker installiert"
 fi
 
+# docker-Gruppe erst NACH Docker-Installation setzen
+usermod -aG docker alex
+log "User 'alex' zur docker-Gruppe hinzugefügt"
+
 # ── unattended-upgrades konfigurieren ────────────────────────
-# Eigene Konfiguration in 51er-Datei (überschreibt 50er-Defaults)
 cat > /etc/apt/apt.conf.d/51ugly-upgrades << 'UPGRADES'
 // Ugly Stack — Auto-Update Konfiguration
 Unattended-Upgrade::Allowed-Origins {
@@ -170,7 +173,6 @@ Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
 Unattended-Upgrade::Automatic-Reboot-Time "03:30";
 UPGRADES
 
-# apt-daily timer auf 03:00 setzen (systemd override)
 mkdir -p /etc/systemd/system/apt-daily.timer.d
 cat > /etc/systemd/system/apt-daily.timer.d/override.conf << 'TIMER'
 [Timer]
@@ -472,20 +474,10 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
-# Zeitplan:
-# 02:00 — Backup (inkl. .env sync + Status-Mail)
-# 02:30 — Watchtower (Container-Updates, via docker-compose Schedule)
-# 03:00 — unattended-upgrades (System + Docker Engine)
-# 03:30 — Automatischer Neustart falls Kernel-Update nötig
-
-# Backup-Cron
 (crontab -u alex -l 2>/dev/null; \
   echo "0 2 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
   | crontab -u alex -
 log "Backup-Cron eingerichtet (täglich 02:00)"
-
-# Watchtower Schedule in docker-compose ist bereits auf 02:30 UTC gesetzt
-# (0 30 2 * * * im WATCHTOWER_SCHEDULE Format: Sekunde Minute Stunde ...)
 
 ufw default deny incoming
 ufw default allow outgoing
