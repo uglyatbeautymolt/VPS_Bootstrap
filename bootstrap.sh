@@ -206,7 +206,6 @@ grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" \
 log ".gitignore aktualisiert"
 
 # ── sudoers: sudo-Timeout 60 Min + Lesezugriff openclaw-data ─
-# Einmal sudo-Passwort eingeben → 60 Minuten keine weitere Abfrage
 cat > /etc/sudoers.d/alex-ugly-stack << SUDOERS
 # sudo Passwort-Timeout: 60 Minuten
 Defaults:alex timestamp_timeout=60
@@ -331,7 +330,7 @@ else
   warn "Kein Backup gefunden — frischer Start"
 fi
 
-# Post-Restore: openclaw.json auf korrekte Konfiguration prüfen und fixieren
+# Post-Restore: openclaw.json prüfen und fixieren
 info "openclaw.json prüfen und korrigieren..."
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   python3 << PYFIX
@@ -347,19 +346,15 @@ except Exception as e:
 
 changed = False
 
-# bind muss "lan" sein
 if cfg.get("gateway", {}).get("bind") != "lan":
     cfg.setdefault("gateway", {})["bind"] = "lan"
     changed = True
     print("  Fix: bind → lan")
 
-# hooks muss Top-Level sein mit enabled:true
 if not cfg.get("hooks", {}).get("enabled"):
-    import os
     hook_token = ""
-    env_path = "$STACK_DIR/.env"
     try:
-        with open(env_path) as ef:
+        with open("$STACK_DIR/.env") as ef:
             for line in ef:
                 if line.startswith("OPENCLAW_HOOK_TOKEN="):
                     hook_token = line.strip().split("=", 1)[1]
@@ -378,7 +373,7 @@ if changed:
         json.dump(cfg, f, indent=2)
     print("  openclaw.json aktualisiert")
 else:
-    print("  openclaw.json bereits korrekt (bind:lan, hooks aktiv)")
+    print("  openclaw.json bereits korrekt")
 PYFIX
   chown 1000:1000 "$STACK_DIR/openclaw-data/openclaw.json"
   log "openclaw.json geprüft"
@@ -450,15 +445,11 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
+# Backup-Cron: absoluter Pfad + bash — backup-master erledigt auch .env-Sync
 (crontab -u alex -l 2>/dev/null; \
-  echo "0 3 * * * $STACK_DIR/backup/backup-master.sh >> $STACK_DIR/backup/backup.log 2>&1") \
+  echo "0 3 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
   | crontab -u alex -
-log "Backup-Cron eingerichtet (täglich 03:00)"
-
-(crontab -u alex -l 2>/dev/null; \
-  echo "*/30 * * * * cd $STACK_DIR && source $STACK_DIR/.env && gpg --batch --yes --passphrase \"\$BACKUP_GPG_PASSWORD\" --symmetric --cipher-algo AES256 -o .env.gpg .env && git add .env.gpg && git diff --cached --quiet || git commit -m 'update: .env sync' && git push origin main") \
-  | crontab -u alex -
-log ".env Sync-Cron eingerichtet (alle 30 Min)"
+log "Backup-Cron eingerichtet (täglich 03:00 — inkl. .env sync + Status-Mail)"
 
 ufw default deny incoming
 ufw default allow outgoing
@@ -473,15 +464,15 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Stack: $STACK_DIR"
 echo "  User:  alex (sudo, docker)"
-echo "  Backup: täglich 03:00 → R2"
-echo "  .env:   alle 30 Min → GitHub"
+echo "  Backup: täglich 03:00 → R2 (inkl. .env sync + Status-Mail)"
 echo ""
 echo "  Services:"
-echo "    claw.beautymolt.com   → OpenClaw"
-echo "    search.beautymolt.com → SearXNG"
-echo "    n8n.beautymolt.com    → n8n"
-echo "    www.beautymolt.com    → nginx"
-echo "    mail.beautymolt.com   → Roundcube"
+echo "    claw.beautymolt.com      → OpenClaw"
+echo "    search.beautymolt.com    → SearXNG"
+echo "    n8n.beautymolt.com       → n8n"
+echo "    www.beautymolt.com       → nginx"
+echo "    mail.beautymolt.com      → Roundcube"
+echo "    portainer.beautymolt.com → Portainer"
 echo ""
 if [ "$BACKUP_RESTORED" = false ]; then
   warn "Kein Backup wiederhergestellt — Telegram Onboarding nötig:"
