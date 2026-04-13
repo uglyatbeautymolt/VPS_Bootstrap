@@ -8,12 +8,12 @@
 
 | URL | Service |
 |-----|---------|
-| claw.beautymolt.com | OpenClaw (Ugly) |
-| search.beautymolt.com | SearXNG |
-| n8n.beautymolt.com | n8n |
-| www.beautymolt.com | nginx Webserver |
-| mail.beautymolt.com | Roundcube |
-| portainer.beautymolt.com | Portainer (Docker Management) |
+| [claw.beautymolt.com](https://claw.beautymolt.com) | OpenClaw (Ugly) |
+| [search.beautymolt.com](https://search.beautymolt.com) | SearXNG |
+| [n8n.beautymolt.com](https://n8n.beautymolt.com) | n8n |
+| [www.beautymolt.com](https://www.beautymolt.com) | nginx Webserver |
+| [mail.beautymolt.com](https://mail.beautymolt.com) | Roundcube |
+| [portainer.beautymolt.com](https://portainer.beautymolt.com) | Portainer (Docker Management) |
 
 ## Docker Netzwerk
 
