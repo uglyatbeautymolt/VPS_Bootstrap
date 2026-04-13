@@ -108,7 +108,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - WATCHTOWER_SCHEDULE=0 0 4 * * *
+      # Zeitplan: 02:30 UTC (nach Backup 02:00, vor unattended-upgrades 03:00)
+      - WATCHTOWER_SCHEDULE=0 30 2 * * *
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_NO_STARTUP_MESSAGE=true
       - WATCHTOWER_NOTIFICATIONS=email
