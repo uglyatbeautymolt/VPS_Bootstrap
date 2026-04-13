@@ -38,13 +38,13 @@
   </marker>
 </defs>
 
-<!-- VPS -->
+<!-- VPS — äusserer Rahmen -->
 <rect x="20" y="20" width="640" height="1030" rx="16" class="c-gray-fill" stroke-width="0.5"/>
 <text class="th th-gray" x="340" y="47" text-anchor="middle">Hostinger VPS — Ubuntu 24.04</text>
 <text class="ts ts-gray" x="340" y="64" text-anchor="middle">root + user alex</text>
 
-<!-- Docker Engine -->
-<rect x="40" y="78" width="600" height="682" rx="12" class="c-blue-fill" stroke-width="0.5"/>
+<!-- Docker Engine — endet VOR unattended-upgrades -->
+<rect x="40" y="78" width="600" height="634" rx="12" class="c-blue-fill" stroke-width="0.5"/>
 <text class="th th-blue" x="340" y="100" text-anchor="middle">Docker Engine</text>
 <text class="ts ts-blue" x="340" y="116" text-anchor="middle">docker compose — /home/alex/ugly-stack</text>
 
@@ -132,72 +132,74 @@
 <rect x="220" y="404" width="180" height="18" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
 <text font-size="11" font-weight="500" fill="#633806" x="310" y="417" text-anchor="middle">HTTP POST /hooks/agent</text>
 
-<!-- Watchtower -->
+<!-- Watchtower — innerhalb Docker Engine -->
 <rect x="62" y="434" width="560" height="48" rx="8" class="c-green-fill" stroke-width="0.5"/>
 <text class="th th-green" x="340" y="454" text-anchor="middle">Watchtower — Auto-Update (02:30 UTC)</text>
 <text class="ts ts-green" x="340" y="470" text-anchor="middle">openclaw · searxng · nginx · roundcube — Docker Socket</text>
 
-<!-- Externe Anbindungen -->
-<rect x="56" y="570" width="568" height="88" rx="10" class="c-net-fill" stroke-width="1.2" stroke-dasharray="6 3"/>
-<text class="ts ts-gray" x="340" y="586" text-anchor="middle" font-style="italic">Externe Anbindungen</text>
+<!-- Externe Anbindungen — innerhalb Docker Engine -->
+<rect x="56" y="494" width="568" height="88" rx="10" class="c-net-fill" stroke-width="1.2" stroke-dasharray="6 3"/>
+<text class="ts ts-gray" x="340" y="510" text-anchor="middle" font-style="italic">Externe Anbindungen</text>
 
 <!-- OpenRouter -->
-<rect x="60" y="592" width="165" height="56" rx="8" class="c-teal-fill" stroke-width="0.5"/>
-<text class="th th-teal" x="142" y="614" text-anchor="middle">OpenRouter</text>
-<text class="ts ts-teal" x="142" y="630" text-anchor="middle">DeepSeek / Kimi</text>
+<rect x="60" y="516" width="165" height="56" rx="8" class="c-teal-fill" stroke-width="0.5"/>
+<text class="th th-teal" x="142" y="538" text-anchor="middle">OpenRouter</text>
+<text class="ts ts-teal" x="142" y="554" text-anchor="middle">DeepSeek / Kimi</text>
 
 <!-- Brevo -->
-<rect x="240" y="592" width="165" height="56" rx="8" class="c-amber-fill" stroke-width="0.5"/>
-<text class="th th-amber" x="322" y="614" text-anchor="middle">Brevo</text>
-<text class="ts ts-amber" x="322" y="630" text-anchor="middle">SMTP + REST API</text>
+<rect x="240" y="516" width="165" height="56" rx="8" class="c-amber-fill" stroke-width="0.5"/>
+<text class="th th-amber" x="322" y="538" text-anchor="middle">Brevo</text>
+<text class="ts ts-amber" x="322" y="554" text-anchor="middle">SMTP + REST API</text>
 
 <!-- Zoho Mail -->
-<rect x="420" y="592" width="165" height="56" rx="8" class="c-coral-fill" stroke-width="0.5"/>
-<text class="th th-coral" x="502" y="614" text-anchor="middle">Zoho Mail</text>
-<text class="ts ts-coral" x="502" y="630" text-anchor="middle">IMAP / SMTP</text>
+<rect x="420" y="516" width="165" height="56" rx="8" class="c-coral-fill" stroke-width="0.5"/>
+<text class="th th-coral" x="502" y="538" text-anchor="middle">Zoho Mail</text>
+<text class="ts ts-coral" x="502" y="554" text-anchor="middle">IMAP / SMTP</text>
 
 <!-- Verbindungen zu externen Diensten -->
-<line x1="107" y1="482" x2="142" y2="590" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="107" y1="482" x2="322" y2="590" stroke="#BA7517" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="395" y1="482" x2="502" y2="590" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="491" y1="482" x2="502" y2="590" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="107" y1="482" x2="142" y2="514" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="107" y1="482" x2="322" y2="514" stroke="#BA7517" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="395" y1="482" x2="502" y2="514" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="491" y1="482" x2="502" y2="514" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 
-<!-- unattended-upgrades -->
-<rect x="40" y="680" width="600" height="40" rx="8" class="c-gray-fill" stroke-width="0.5"/>
-<text class="th th-gray" x="340" y="700" text-anchor="middle">unattended-upgrades — Ubuntu Security + Docker Engine (03:00 UTC, Reboot 03:30)</text>
+<!-- ═══ AB HIER: VPS-EBENE (ausserhalb Docker) ═══ -->
+
+<!-- unattended-upgrades — auf VPS-Ebene, ausserhalb Docker Engine -->
+<rect x="40" y="726" width="600" height="40" rx="8" class="c-gray-fill" stroke-width="1"/>
+<text class="th th-gray" x="200" y="750" text-anchor="middle">unattended-upgrades</text>
+<text class="ts ts-gray" x="490" y="746" text-anchor="middle">Ubuntu Security + Docker Engine</text>
+<text class="ts ts-gray" x="490" y="760" text-anchor="middle">täglich 03:00 UTC — Reboot 03:30 UTC</text>
 
 <!-- GitHub -->
-<rect x="40" y="740" width="600" height="56" rx="8" class="c-green-fill" stroke-width="0.5"/>
-<text class="th th-green" x="340" y="762" text-anchor="middle">GitHub — uglyatbeautymolt/VPS_Bootstrap</text>
-<text class="ts ts-green" x="340" y="778" text-anchor="middle">bootstrap.sh · docker-compose.yml · .env.gpg (verschlüsselt) · backup/</text>
+<rect x="40" y="782" width="600" height="56" rx="8" class="c-green-fill" stroke-width="0.5"/>
+<text class="th th-green" x="340" y="804" text-anchor="middle">GitHub — uglyatbeautymolt/VPS_Bootstrap</text>
+<text class="ts ts-green" x="340" y="820" text-anchor="middle">bootstrap.sh · docker-compose.yml · .env.gpg (verschlüsselt) · backup/</text>
 
 <!-- Bitwarden -->
-<rect x="40" y="814" width="290" height="64" rx="8" class="c-violet-fill" stroke-width="0.5"/>
-<text class="th th-violet" x="185" y="838" text-anchor="middle">Bitwarden</text>
-<text class="ts ts-violet" x="185" y="854" text-anchor="middle">BACKUP_GPG_PASSWORD</text>
-<text class="ts ts-violet" x="185" y="869" text-anchor="middle">GITHUB_TOKEN</text>
+<rect x="40" y="854" width="290" height="64" rx="8" class="c-violet-fill" stroke-width="0.5"/>
+<text class="th th-violet" x="185" y="878" text-anchor="middle">Bitwarden</text>
+<text class="ts ts-violet" x="185" y="894" text-anchor="middle">BACKUP_GPG_PASSWORD</text>
+<text class="ts ts-violet" x="185" y="909" text-anchor="middle">GITHUB_TOKEN</text>
 
 <!-- Cloudflare R2 -->
-<rect x="350" y="814" width="290" height="64" rx="8" class="c-blue-fill" stroke-width="0.5"/>
-<text class="th th-blue" x="495" y="838" text-anchor="middle">Cloudflare R2</text>
-<text class="ts ts-blue" x="495" y="854" text-anchor="middle">Backups GPG — 7 normal + 4 WEEKLY</text>
+<rect x="350" y="854" width="290" height="64" rx="8" class="c-blue-fill" stroke-width="0.5"/>
+<text class="th th-blue" x="495" y="878" text-anchor="middle">Cloudflare R2</text>
+<text class="ts ts-blue" x="495" y="894" text-anchor="middle">Backups GPG — 7 normal + 4 WEEKLY</text>
 
 <!-- Pfeile GitHub ↔ Bitwarden/R2 -->
-<line x1="185" y1="728" x2="185" y2="738" stroke="#6D28D9" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="495" y1="728" x2="495" y2="738" stroke="#185FA5" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="185" y1="798" x2="185" y2="812" stroke="#6D28D9" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="495" y1="798" x2="495" y2="812" stroke="#185FA5" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="185" y1="770" x2="185" y2="780" stroke="#6D28D9" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="495" y1="770" x2="495" y2="780" stroke="#185FA5" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="185" y1="838" x2="185" y2="852" stroke="#6D28D9" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="495" y1="838" x2="495" y2="852" stroke="#185FA5" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 
 <!-- Telegram -->
-<rect x="230" y="896" width="220" height="40" rx="8" class="c-gray-fill" stroke-width="0.5"/>
-<text class="th th-gray" x="340" y="920" text-anchor="middle">Telegram → OpenClaw</text>
-<path d="M340 896 L340 884 L107 884 L107 482" fill="none" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<rect x="230" y="934" width="220" height="40" rx="8" class="c-gray-fill" stroke-width="0.5"/>
+<text class="th th-gray" x="340" y="958" text-anchor="middle">Telegram → OpenClaw</text>
+<path d="M340 934 L340 922 L107 922 L107 482" fill="none" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 
-<!-- Zeitplan Label -->
-<rect x="40" y="952" width="600" height="88" rx="8" class="c-gray-fill" stroke-width="0.5"/>
-<text class="th th-gray" x="340" y="974" text-anchor="middle">Automatischer Zeitplan (UTC)</text>
-<text class="ts ts-gray" x="340" y="993" text-anchor="middle">02:00 Backup → R2 + .env → GitHub + Mail</text>
-<text class="ts ts-gray" x="340" y="1009" text-anchor="middle">02:30 Watchtower Container-Updates · 03:00 unattended-upgrades</text>
-<text class="ts ts-gray" x="340" y="1025" text-anchor="middle">03:30 Automatischer Neustart (falls Kernel-Update)</text>
+<!-- Zeitplan -->
+<rect x="40" y="988" width="600" height="52" rx="8" class="c-gray-fill" stroke-width="0.5"/>
+<text class="th th-gray" x="340" y="1008" text-anchor="middle">Automatischer Zeitplan (UTC)</text>
+<text class="ts ts-gray" x="340" y="1026" text-anchor="middle">02:00 Backup → R2 + .env → GitHub + Mail · 02:30 Watchtower · 03:00 unattended-upgrades · 03:30 Reboot</text>
 
 </svg>
