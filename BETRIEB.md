@@ -14,40 +14,33 @@
 
 ## 1. Erste Installation
 
-### Vorbereitung
-Bevor du `bootstrap.sh` startest, sammle folgende Informationen:
+### Voraussetzungen — Secrets
 
-| Secret | Wo finden |
-|--------|-----------|
-| `CLOUDFLARE_TUNNEL_TOKEN` | Cloudflare → Zero Trust → Tunnels → beautymoltTunnel |
-| `OPENROUTER_API_KEY` | openrouter.ai → Keys |
-| `TELEGRAM_BOT_TOKEN` | @BotFather auf Telegram — bestehenden weiterverwenden |
-| `OPENCLAW_GATEWAY_TOKEN` | Selbst wählen — bestehenden weiterverwenden |
-| `N8N_BASIC_AUTH_USER` | Selbst wählen |
-| `N8N_BASIC_AUTH_PASSWORD` | Selbst wählen |
-| `N8N_ENCRYPTION_KEY` | `openssl rand -hex 16` — bestehenden beibehalten! |
-| `ZOHO_SMTP_USER` | Zoho Mail Login E-Mail |
-| `ZOHO_SMTP_PASSWORD` | Zoho Mail → Einstellungen → SMTP |
-| `BREVO_SMTP_USER` | Brevo Login E-Mail |
-| `BREVO_SMTP_API_KEY` | Brevo → SMTP & API → API Keys |
-| `BACKUP_GPG_PASSWORD` | In Bitwarden — wird automatisch geholt |
-| `CF_R2_ACCESS_KEY` | Cloudflare → R2 → Manage API Tokens |
-| `CF_R2_SECRET_KEY` | Cloudflare → R2 → Manage API Tokens |
-| `CF_R2_BUCKET` | Name deines R2 Buckets |
-| `CF_R2_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
-
-### Vorbereitung .env
-
-Die `.env` liegt verschlüsselt als `.env.gpg` im GitHub Repo.
+Folgende Secrets müssen in der **`.env`** hinterlegt sein (verschlüsselt als `.env.gpg` im Repo).
 `BACKUP_GPG_PASSWORD` liegt in **Bitwarden** — wird beim bootstrap automatisch geholt.
 
-**bootstrap.sh fragt nur nach:**
-1. Bitwarden E-Mail
-2. Bitwarden Master-Passwort
-
-Alles andere kommt automatisch aus der entschlüsselten `.env.gpg`.
+| Secret | Beschreibung | Wo finden |
+|--------|-------------|----------|
+| `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel Token | Cloudflare → Zero Trust → Tunnels → beautymoltTunnel |
+| `OPENROUTER_API_KEY` | OpenRouter API Key | openrouter.ai → Keys |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | @BotFather auf Telegram — bestehenden weiterverwenden |
+| `OPENCLAW_GATEWAY_TOKEN` | OpenClaw Gateway Token | Selbst wählen — bestehenden weiterverwenden |
+| `N8N_BASIC_AUTH_USER` | n8n Benutzername | Selbst wählen |
+| `N8N_BASIC_AUTH_PASSWORD` | n8n Passwort | Selbst wählen |
+| `N8N_ENCRYPTION_KEY` | n8n Encryption Key (32 Zeichen) | `openssl rand -hex 16` — **bestehenden beibehalten!** |
+| `ZOHO_SMTP_USER` | Zoho Mail Login E-Mail | Zoho Mail Login |
+| `ZOHO_SMTP_PASSWORD` | Zoho SMTP Passwort | Zoho Mail → Einstellungen → SMTP |
+| `BREVO_SMTP_USER` | Brevo SMTP Login | `a50340001@smtp-brevo.com` |
+| `BREVO_SMTP_API_KEY` | Brevo SMTP API Key (xsmtpsib-...) | Brevo → SMTP & API → API Keys |
+| `BREVO_KEY` | Brevo REST API Key (xkeysib-...) | Brevo → SMTP & API → API Keys |
+| `BACKUP_GPG_PASSWORD` | Passwort für Backup-Verschlüsselung | In Bitwarden — wird automatisch geholt |
+| `CF_R2_ACCESS_KEY` | R2 Access Key | Cloudflare → R2 → Manage API Tokens |
+| `CF_R2_SECRET_KEY` | R2 Secret Key | Cloudflare → R2 → Manage API Tokens |
+| `CF_R2_BUCKET` | R2 Bucket Name | Name deines R2 Buckets |
+| `CF_R2_ENDPOINT` | R2 Endpoint URL | `https://<account-id>.r2.cloudflarestorage.com` |
 
 ### Installation starten
+
 ```bash
 # Als root auf dem frischen VPS einloggen
 ssh root@deine-vps-ip
@@ -98,13 +91,13 @@ Das `set-secret.sh` Script aktualisiert `.env` UND Cloudflare Secrets Store glei
 cd ~/ugly-stack
 
 # Mit Argumenten
-./set-secret.sh TELEGRAM_BOT_TOKEN "123456:ABC-DEF..."
+bash set-secret.sh TELEGRAM_BOT_TOKEN "123456:ABC-DEF..."
 
 # Nur Name, Wert wird abgefragt (unsichtbar)
-./set-secret.sh OPENROUTER_API_KEY
+bash set-secret.sh OPENROUTER_API_KEY
 
 # Interaktiv — zeigt alle Secrets zur Auswahl
-./set-secret.sh
+bash set-secret.sh
 ```
 
 Das Script fragt automatisch ob der betroffene Container neu gestartet werden soll.
@@ -125,6 +118,7 @@ docker compose up -d --force-recreate openclaw
 | TELEGRAM_BOT_TOKEN | openclaw |
 | OPENROUTER_API_KEY | openclaw |
 | OPENCLAW_GATEWAY_TOKEN | openclaw |
+| BREVO_KEY | openclaw |
 | N8N_* | n8n |
 | CLOUDFLARE_TUNNEL_TOKEN | cloudflared |
 | ZOHO_SMTP_* | n8n |
@@ -132,10 +126,10 @@ docker compose up -d --force-recreate openclaw
 
 ### Token erneuern — Schritt für Schritt
 1. Neuen Token beim Anbieter generieren
-2. `./set-secret.sh SECRET_NAME "neuer-wert"` ausführen
+2. `bash set-secret.sh SECRET_NAME "neuer-wert"` ausführen
 3. Container neu starten wenn das Script fragt
 4. Funktion testen (z.B. Telegram-Nachricht senden)
-5. Backup machen: `./backup/backup-master.sh`
+5. Backup machen: `bash backup/backup-master.sh`
 
 ---
 
@@ -217,13 +211,13 @@ docker exec nginx nginx -s reload
 ## 5. Backup
 
 ### Automatisches Backup
-Läuft täglich um 03:00 Uhr via Cron.
+Läuft täglich um 02:00 UTC via Cron.
 Ziel: Cloudflare R2 → verschlüsselt mit GPG AES256.
-Letzte 7 Backups werden behalten.
+7 normale + 4 WEEKLY Backups werden behalten.
 
 ### Manuelles Backup auslösen
 ```bash
-~/ugly-stack/backup/backup-master.sh
+bash ~/ugly-stack/backup/backup-master.sh
 ```
 
 ### Backup-Log prüfen
@@ -235,10 +229,11 @@ tail -f ~/ugly-stack/backup/backup.log
 
 | Modul | Was | Wie |
 |-------|-----|-----|
-| openclaw | Komplettes ~/.openclaw (State, Workspace, Credentials, Telegram-Session, Skills) | `openclaw backup create --verify` |
+| openclaw | Komplettes openclaw-data Volume (State, Memory, Skills, Credentials) | tar.gz |
 | n8n | Workflows + Credentials als JSON | `n8n export` |
 | nginx | Konfigurationsdateien | Direktkopie |
 | www | Webseiten-Dateien | Direktkopie |
+| portainer | portainer-data Volume | tar.gz |
 
 ### Backup nach wichtigen Änderungen
 Nach diesen Ereignissen immer manuell ein Backup auslösen:
@@ -253,12 +248,12 @@ Nach diesen Ereignissen immer manuell ein Backup auslösen:
 
 ### Verfügbare Backups anzeigen
 ```bash
-~/ugly-stack/backup/restore/restore-master.sh list
+bash ~/ugly-stack/backup/restore/restore-master.sh list
 ```
 
 ### Alles wiederherstellen
 ```bash
-~/ugly-stack/backup/restore/restore-master.sh
+bash ~/ugly-stack/backup/restore/restore-master.sh
 # → zeigt Backup-Liste zur Auswahl
 # → stoppt Stack
 # → stellt alle Daten wieder her
@@ -268,16 +263,16 @@ Nach diesen Ereignissen immer manuell ein Backup auslösen:
 ### Einzelnen Service wiederherstellen
 ```bash
 # Nur OpenClaw
-~/ugly-stack/backup/restore/restore-master.sh openclaw
+bash ~/ugly-stack/backup/restore/restore-master.sh openclaw
 
 # Nur n8n
-~/ugly-stack/backup/restore/restore-master.sh n8n
+bash ~/ugly-stack/backup/restore/restore-master.sh n8n
 
 # Nur nginx
-~/ugly-stack/backup/restore/restore-master.sh nginx
+bash ~/ugly-stack/backup/restore/restore-master.sh nginx
 
 # Nur Webseite
-~/ugly-stack/backup/restore/restore-master.sh www
+bash ~/ugly-stack/backup/restore/restore-master.sh www
 ```
 
 ### Nach OpenClaw-Restore
@@ -313,7 +308,7 @@ Siehe `backup/NEUES_MODUL.md` für die vollständige Anleitung.
 
 ### Secret hinzufügen
 ```bash
-./set-secret.sh NEUER_SERVICE_API_KEY "wert"
+bash set-secret.sh NEUER_SERVICE_API_KEY "wert"
 ```
 
 ---
@@ -328,7 +323,7 @@ docker compose up -d --force-recreate CONTAINER_NAME
 
 ### .env Wert falsch
 ```bash
-./set-secret.sh SECRET_NAME "korrekter-wert"
+bash set-secret.sh SECRET_NAME "korrekter-wert"
 docker compose up -d --force-recreate CONTAINER_NAME
 ```
 
@@ -351,23 +346,20 @@ STAGING=/tmp/test-staging STACK_DIR=~/ugly-stack \
 grep TELEGRAM_BOT_TOKEN ~/ugly-stack/.env
 
 # Neu setzen
-./set-secret.sh TELEGRAM_BOT_TOKEN "neuer-token"
-
-# Gateway neu einrichten
-docker exec -it openclaw openclaw gateway --setup
+bash set-secret.sh TELEGRAM_BOT_TOKEN "neuer-token"
 ```
 
 ### Stack komplett neu aufsetzen (Neuinstallation)
 ```bash
 # Auf dem alten VPS (falls noch erreichbar):
-~/ugly-stack/backup/backup-master.sh
+bash ~/ugly-stack/backup/backup-master.sh
 
 # Auf dem neuen VPS:
 curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh \
   -o bootstrap.sh
 chmod +x bootstrap.sh
 ./bootstrap.sh
-# → holt automatisch Secrets aus Cloudflare
+# → holt automatisch Secrets aus Bitwarden
 # → stellt neuestes Backup von R2 wieder her
 ```
 
@@ -392,6 +384,7 @@ chmod +x bootstrap.sh
 └── backup/
     ├── backup-master.sh          ← Alle Module + Upload zu R2
     ├── backup.log                ← Backup-Protokoll
+    ├── .checksums                ← Checksummen (gitignored)
     ├── NEUES_MODUL.md            ← Anleitung neuer Container
     ├── modules/                  ← Backup-Module
     │   ├── openclaw.sh
@@ -416,14 +409,10 @@ chmod +x bootstrap.sh
 ### Schritt 1 — Backups auf altem VPS aktualisieren
 
 ```bash
-# Manuelles Backup auslösen
-~/ugly-stack/backup/backup-master.sh
-
-# www Backup zu R2
-~/backup-www.sh
+bash ~/ugly-stack/backup/backup-master.sh
 
 # Prüfen ob alles in R2 ist
-rclone ls r2:ugly-vps-backup/ --config ~/.config/rclone/rclone.conf
+rclone ls r2:$CF_R2_BUCKET/backups/ --config ~/ugly-stack/rclone/rclone.conf
 ```
 
 ### Schritt 2 — Neuen VPS aufsetzen
@@ -435,10 +424,6 @@ curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main
 chmod +x bootstrap.sh
 ./bootstrap.sh
 ```
-
-Fragt nur nach:
-1. Bitwarden E-Mail
-2. Bitwarden Master-Passwort
 
 ### Schritt 3 — Services auf neuem VPS prüfen
 
@@ -460,16 +445,10 @@ Cloudflare Dashboard → Zero Trust → Networks → Tunnels → beautymoltTunne
 | `www.beautymolt.com` | `http://nginx:80` |
 | `search.beautymolt.com` | `http://nginx:80` |
 | `n8n.beautymolt.com` | `http://nginx:80` |
+| `mail.beautymolt.com` | `http://nginx:80` |
+| `portainer.beautymolt.com` | `http://nginx:80` |
 
-### Schritt 5 — OpenClaw Onboarding
-
-```bash
-docker exec -it openclaw bash
-openclaw onboard
-openclaw gateway start
-```
-
-### Schritt 6 — Services testen
+### Schritt 5 — Services testen
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}" https://www.beautymolt.com
@@ -480,7 +459,7 @@ curl -s -o /dev/null -w "%{http_code}" https://claw.beautymolt.com
 
 Alle sollten `200` zurückgeben.
 
-### Schritt 7 — Alten VPS herunterfahren
+### Schritt 6 — Alten VPS herunterfahren
 
 Erst wenn alles funktioniert:
 
@@ -490,21 +469,3 @@ sudo poweroff
 ```
 
 Dann alten VPS bei Hostinger löschen.
-
-### Troubleshooting
-
-```bash
-# Tunnel verbindet sich nicht
-docker compose logs cloudflared
-
-# nginx Problem
-docker exec nginx nginx -t
-docker compose restart nginx
-
-# n8n Credentials fehlen
-docker compose exec n8n n8n import:credentials \
-  --input=/home/node/.n8n/credentials-backup.json
-
-# OpenClaw antwortet nicht auf Telegram
-docker exec -it openclaw openclaw gateway --setup
-```

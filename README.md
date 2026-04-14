@@ -2,6 +2,28 @@
 
 > Persönlicher KI-Agent "Ugly" auf einem selbst gehosteten VPS — vollständig automatisiert, verschlüsselt gesichert und in wenigen Minuten wiederherstellbar.
 
+## Schnellstart — Neuinstallation
+
+```bash
+# Als root auf frischem Ubuntu 24.04 VPS
+curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh \
+  -o bootstrap.sh
+chmod +x bootstrap.sh
+./bootstrap.sh
+```
+
+Das Script fragt nur nach:
+1. Bitwarden E-Mail
+2. Bitwarden Master-Passwort
+3. Passwort für User `alex`
+
+Alles andere kommt automatisch aus der verschlüsselten `.env.gpg` im Repo.
+Neuestes Backup wird automatisch von Cloudflare R2 wiederhergestellt.
+
+→ Alle Voraussetzungen, Secrets und Installationsdetails: **[BETRIEB.md — Erste Installation](./BETRIEB.md#1-erste-installation)**
+
+---
+
 ![Ugly Stack Architektur](./architecture.svg)
 
 ## Services
@@ -47,48 +69,6 @@ watchtower  — kein HTTP, nur Docker Socket
 | roundcube | roundcube | 80 | ugly-net |
 | portainer | portainer | 9000 | ugly-net |
 | watchtower | watchtower | — | ugly-net |
-
-## Schnellstart — Neuinstallation
-
-```bash
-# Als root auf frischem Ubuntu 24.04 VPS
-curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh \
-  -o bootstrap.sh
-chmod +x bootstrap.sh
-./bootstrap.sh
-```
-
-Das Script fragt nur nach:
-1. Bitwarden E-Mail
-2. Bitwarden Master-Passwort
-3. Passwort für User `alex`
-
-Alles andere kommt automatisch aus der verschlüsselten `.env.gpg` im Repo.
-Neuestes Backup wird automatisch von Cloudflare R2 wiederhergestellt.
-
-## Voraussetzungen
-
-Folgende Secrets müssen in der **`.env`** hinterlegt sein (verschlüsselt als `.env.gpg` im Repo):
-
-| Secret | Beschreibung |
-|--------|-------------|
-| `CLOUDFLARE_TUNNEL_TOKEN` | Tunnel Token |
-| `OPENROUTER_API_KEY` | OpenRouter API Key |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token |
-| `OPENCLAW_GATEWAY_TOKEN` | OpenClaw Gateway Token |
-| `N8N_BASIC_AUTH_USER` | n8n Benutzername |
-| `N8N_BASIC_AUTH_PASSWORD` | n8n Passwort |
-| `N8N_ENCRYPTION_KEY` | n8n Encryption Key (32 Zeichen) |
-| `ZOHO_SMTP_USER` | Zoho Mail Login E-Mail |
-| `ZOHO_SMTP_PASSWORD` | Zoho SMTP Passwort |
-| `BREVO_SMTP_USER` | Brevo SMTP Login (a50340001@smtp-brevo.com) |
-| `BREVO_SMTP_API_KEY` | Brevo SMTP API Key (xsmtpsib-...) |
-| `BREVO_KEY` | Brevo REST API Key (xkeysib-...) |
-| `BACKUP_GPG_PASSWORD` | Passwort für Backup-Verschlüsselung |
-| `CF_R2_ACCESS_KEY` | R2 Access Key |
-| `CF_R2_SECRET_KEY` | R2 Secret Key |
-| `CF_R2_BUCKET` | R2 Bucket Name |
-| `CF_R2_ENDPOINT` | R2 Endpoint URL |
 
 ## Automatische Updates — Zeitplan (UTC)
 
