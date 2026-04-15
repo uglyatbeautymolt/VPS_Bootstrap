@@ -42,7 +42,6 @@ services:
       - TZ=${TZ}
     volumes:
       - ./openclaw-data:/home/node/.openclaw
-      - ./obsidian-vault:/home/node/obsidian:ro
     networks:
       - ugly-net
     depends_on:
@@ -86,19 +85,6 @@ services:
     networks:
       - ugly-net
 
-  couchdb:
-    image: couchdb:3.3
-    container_name: couchdb
-    restart: unless-stopped
-    environment:
-      - COUCHDB_USER=${COUCHDB_USER}
-      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
-    volumes:
-      - ./couchdb-data:/opt/couchdb/data
-      - ./couchdb-etc:/opt/couchdb/etc/local.d
-    networks:
-      - ugly-net
-
   roundcube:
     image: roundcube/roundcubemail:latest
     container_name: roundcube
@@ -137,7 +123,7 @@ services:
       - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${BREVO_SMTP_API_KEY}
     networks:
       - ugly-net
-    command: openclaw searxng nginx roundcube couchdb
+    command: openclaw searxng nginx roundcube
 
   portainer:
     image: portainer/portainer-ce:latest

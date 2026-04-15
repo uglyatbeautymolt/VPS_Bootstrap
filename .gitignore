@@ -9,6 +9,3 @@ backup/www-sync.sh
 backup/.www-checksum
 backup/.checksums
 roundcube-data/
-couchdb-data/
-couchdb-etc/
-obsidian-vault/
