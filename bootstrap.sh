@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260415_3
+# Version: V.20260415_4
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260415_3"
+BOOTSTRAP_VERSION="V.20260415_4"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
@@ -244,7 +244,7 @@ chmod +x "$STACK_DIR/backup/restore/restore-master.sh"
 chmod +x "$STACK_DIR/backup/restore/modules/"*.sh
 log "Scripts ausführbar gemacht"
 
-mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
+mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www,obsidian-vault,couchdb-data,couchdb-etc}
 
 grep -q "roundcube-data/" "$STACK_DIR/.gitignore" \
   || echo "roundcube-data/" >> "$STACK_DIR/.gitignore"
@@ -363,6 +363,14 @@ if [ -n "$LATEST" ]; then
     log "OpenClaw Backup wiederhergestellt"
   fi
 
+  # CouchDB Backup wiederherstellen
+  if ls "$STAGING/couchdb-data/"*.tar.gz &>/dev/null; then
+    mkdir -p "$STACK_DIR/couchdb-data"
+    tar -xzf "$STAGING/couchdb-data/"*.tar.gz -C "$STACK_DIR/couchdb-data/"
+    chown -R 5984:5984 "$STACK_DIR/couchdb-data"
+    log "CouchDB Backup wiederhergestellt"
+  fi
+
   mkdir -p "$STACK_DIR/nginx/conf.d"
   [ -d "$STAGING/nginx/conf.d" ] && \
     cp -r "$STAGING/nginx/conf.d/." "$STACK_DIR/nginx/conf.d/"
@@ -454,6 +462,43 @@ docker compose ps
 fix_volume_ownership "$STACK_DIR/openclaw-data"
 fix_volume_ownership "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership gesetzt (1000:alex, g+rX)"
+
+# ── CouchDB initialisieren ───────────────────────────────────────────────
+source "$STACK_DIR/.env"
+info "CouchDB initialisieren..."
+for i in $(seq 1 24); do
+  HTTP_CODE=$(docker exec couchdb curl -s -o /dev/null -w "%{http_code}" \
+    http://localhost:5984/ 2>/dev/null || echo "000")
+  if [ "$HTTP_CODE" = "200" ]; then
+    log "CouchDB bereit"
+    break
+  fi
+  warn "CouchDB noch nicht bereit — warte 5s ($i/24)"
+  sleep 5
+done
+
+# Init-Script innerhalb des Containers ausführen (kein Netzwerk-Problem)
+docker exec couchdb sh -c "
+  curl -fsSL https://raw.githubusercontent.com/vrtmrz/obsidian-livesync/main/utils/couchdb/couchdb-init.sh \
+    -o /tmp/couchdb-init.sh && \
+  hostname=http://localhost:5984 \
+  username=${COUCHDB_USER} \
+  password=${COUCHDB_PASSWORD} \
+  sh /tmp/couchdb-init.sh
+" && log "CouchDB initialisiert" || warn "CouchDB Init fehlgeschlagen — manuell prüfen"
+
+# Obsidian-Datenbank erstellen (412 = bereits vorhanden → auch OK)
+HTTP_CODE=$(docker exec couchdb curl -s -o /dev/null -w "%{http_code}" \
+  -X PUT "http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@localhost:5984/${COUCHDB_DB}" 2>/dev/null || echo "000")
+if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "412" ]; then
+  log "CouchDB Datenbank '${COUCHDB_DB}' bereit"
+else
+  warn "CouchDB Datenbank-Erstellung: HTTP $HTTP_CODE — manuell prüfen"
+fi
+
+# obsidian-vault Ownership
+chown -R alex:alex "$STACK_DIR/obsidian-vault"
+log "obsidian-vault bereit"
 
 # ── Portainer Admin via API einrichten ─────────────────────────────────
 source "$STACK_DIR/.env"
@@ -563,6 +608,7 @@ echo "    n8n.beautymolt.com       → n8n"
 echo "    www.beautymolt.com       → nginx"
 echo "    mail.beautymolt.com      → Roundcube"
 echo "    portainer.beautymolt.com → Portainer"
+echo "    obsidian.beautymolt.com  → CouchDB (LiveSync)"
 echo ""
 if [ "$BACKUP_RESTORED" = false ]; then
   warn "Kein Backup wiederhergestellt — Telegram Onboarding nötig:"
