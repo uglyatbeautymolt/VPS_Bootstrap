@@ -1,6 +1,8 @@
 # Ugly Stack
 
-> Persönlicher KI-Agent "Ugly" auf einem selbst gehosteten VPS — vollständig automatisiert, verschlüsselt gesichert und in wenigen Minuten wiederherstellbar.
+> Persönlicher KI-Agent "Ugly" auf einem selbst gehosteten VPS — vollständig automatisiert, verschlüsselt gesichert und auf jedem Ubuntu 24.04 VPS in wenigen Minuten wiederherstellbar.
+
+Der Stack ist hosterunabhängig: Secrets liegen verschlüsselt in GitHub, Daten in Cloudflare R2, DNS und Tunnel in Cloudflare. Ein Wechsel von Hostinger zu Hetzner oder einem anderen Anbieter erfordert nur `bootstrap.sh` auf dem neuen VPS ausführen — der Rest ist automatisch.
 
 ## Schnellstart — Neuinstallation
 
@@ -49,7 +51,7 @@ Alle Container laufen im internen Bridge-Netzwerk **`ugly-net`**. Nach aussen is
 | searxng | 8080 | 977 | |
 | n8n | 5678 | node (1000:1000) | `user:` explizit gesetzt |
 | roundcube | 80 | www-data | |
-| portainer | 9000 | root | |
+| portainer | 9000 | root | Login: admin / siehe `.env` |
 | watchtower | — | root | Socket-Zugriff nötig |
 
 > `user: "1000:1000"` ist bei openclaw und n8n explizit gesetzt. Das verhindert Volume-Ownership-Drift nach Watchtower-Updates — bootstrap.sh setzt die Ownership vollautomatisch.
@@ -99,14 +101,14 @@ bash backup/restore/restore-master.sh
 | Dokument | Inhalt |
 |----------|--------|
 | **[BETRIEB.md](./BETRIEB.md)** | Vollständiges Betriebshandbuch: Secrets, Troubleshooting, Migration |
-| **[CLAUDE.md](./CLAUDE.md)** | Technischer Kontext für Claude-Sessions |
+| **[CLAUDE.md](./CLAUDE.md)** | Technischer Kontext für Claude-Sessions inkl. VPS-Portabilitätsphilosophie |
 | **[backup/NEUES_MODUL.md](./backup/NEUES_MODUL.md)** | Neuen Container + Backup-Modul hinzufügen |
 
 ## Dateistruktur
 
 ```
 ~/ugly-stack/
-├── bootstrap.sh              ← Neuinstallation
+├── bootstrap.sh              ← Neuinstallation (hosterunabhängig)
 ├── set-secret.sh             ← Secret aktualisieren
 ├── docker-compose.yml        ← Stack-Definition
 ├── architecture.svg          ← Architektur-Diagramm

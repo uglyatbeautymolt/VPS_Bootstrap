@@ -9,7 +9,7 @@
 6. [Restore](#6-restore)
 7. [Neue Container hinzufügen](#7-neue-container-hinzufügen)
 8. [Troubleshooting](#8-troubleshooting)
-9. [Migration — Alter VPS → Neuer VPS](#9-migration--alter-vps--neuer-vps)
+9. [VPS wechseln oder neu aufsetzen](#9-vps-wechseln-oder-neu-aufsetzen)
 
 ---
 
@@ -18,6 +18,8 @@
 ### Secrets — Übersicht
 
 Die `.env` liegt verschlüsselt als `.env.gpg` im Repo. `BACKUP_GPG_PASSWORD` und `GITHUB_TOKEN` werden beim bootstrap automatisch aus **Bitwarden** geholt.
+
+**Wichtig:** `PORTAINER_ADMIN_PASSWORD` muss in `.env` vorhanden sein — bootstrap bricht sonst mit Fehlermeldung ab. Kein Fallback.
 
 | Secret | Wo finden |
 |--------|----------|
@@ -33,6 +35,7 @@ Die `.env` liegt verschlüsselt als `.env.gpg` im Repo. `BACKUP_GPG_PASSWORD` un
 | `BREVO_SMTP_USER` | `a50340001@smtp-brevo.com` |
 | `BREVO_SMTP_API_KEY` | Brevo → SMTP & API → API Keys (xsmtpsib-...) |
 | `BREVO_KEY` | Brevo → SMTP & API → API Keys (xkeysib-...) |
+| `PORTAINER_ADMIN_PASSWORD` | Selbst wählen — Portainer Admin-Login |
 | `BACKUP_GPG_PASSWORD` | Bitwarden — wird automatisch geholt |
 | `CF_R2_ACCESS_KEY` | Cloudflare → R2 → Manage API Tokens |
 | `CF_R2_SECRET_KEY` | Cloudflare → R2 → Manage API Tokens |
@@ -87,6 +90,7 @@ Das Script fragt ob der betroffene Container neu gestartet werden soll.
 | CLOUDFLARE_TUNNEL_TOKEN | cloudflared |
 | ZOHO_SMTP_* | n8n |
 | BREVO_SMTP_* | n8n |
+| PORTAINER_ADMIN_PASSWORD | bootstrap (einmalig) |
 
 ---
 
@@ -211,9 +215,28 @@ sudo chown -R 1000:$(id -g) ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data
 sudo chmod -R g+rX ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data
 ```
 
+### Portainer-Passwort unbekannt
+```bash
+# Passwort aus .env lesen
+grep PORTAINER_ADMIN_PASSWORD ~/ugly-stack/.env
+
+# Portainer zurücksetzen (löscht alle Portainer-Daten)
+docker compose stop portainer
+sudo rm -rf /var/lib/docker/volumes/ugly-stack_portainer-data/_data
+docker compose up -d portainer
+# bootstrap-Logik manuell nachholen:
+PORTAINER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' portainer)
+source ~/ugly-stack/.env
+curl -s -X POST "http://${PORTAINER_IP}:9000/api/users/admin/init" \
+  -H "Content-Type: application/json" \
+  -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" | jq .
+```
+
 ---
 
-## 9. Migration — Alter VPS → Neuer VPS
+## 9. VPS wechseln oder neu aufsetzen
+
+Der Stack ist hosterunabhängig konzipiert. Alle Secrets liegen in `.env.gpg` (GitHub), alle Daten in Cloudflare R2, DNS und Tunnel in Cloudflare. Ein Hoster-Wechsel — z.B. von Hostinger zu Hetzner — erfordert nur 4 Schritte.
 
 ### Schritt 1 — Backup auf altem VPS
 ```bash
@@ -236,9 +259,9 @@ docker compose ps
 docker compose logs --tail=30
 ```
 
-### Schritt 4 — Cloudflare Tunnel Routes anpassen
+### Schritt 4 — Cloudflare Tunnel-Route auf neuen VPS umstellen
 
-Dashboard → Zero Trust → Networks → Tunnels → beautymoltTunnel → Edit → Routes
+**Erst wenn der neue VPS läuft!** Dashboard → Zero Trust → Networks → Tunnels → beautymoltTunnel → Edit → Routes
 
 | Subdomain | Service |
 |-----------|--------|
@@ -260,4 +283,4 @@ curl -s -o /dev/null -w "%{http_code}" https://n8n.beautymolt.com
 ```bash
 sudo poweroff
 ```
-Dann bei Hostinger löschen.
+Dann beim Hoster löschen.
