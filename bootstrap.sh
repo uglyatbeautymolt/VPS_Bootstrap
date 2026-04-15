@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260415_1
+# Version: V.20260415_2
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,11 +29,11 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260415_1"
+BOOTSTRAP_VERSION="V.20260415_2"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
-# openclaw-data und n8n-data: owner=1000 (node/container), group=alex(1001)
+# openclaw-data und n8n-data: owner=1000 (node/container), group=alex
 # chmod g+rX damit alex lesen kann ohne sudo (Backup-Checksummen)
 # ─────────────────────────────────────────────────────────────
 fix_volume_ownership() {
@@ -130,7 +130,6 @@ else
   log "User 'alex' angelegt"
 fi
 
-# Nur sudo hier — docker-Gruppe wird nach Docker-Installation in Schritt 3 gesetzt
 usermod -aG sudo alex
 
 echo ""
@@ -167,11 +166,9 @@ else
   log "Docker installiert"
 fi
 
-# docker-Gruppe erst NACH Docker-Installation setzen
 usermod -aG docker alex
 log "User 'alex' zur docker-Gruppe hinzugefügt"
 
-# ── unattended-upgrades konfigurieren ────────────────────────────────────
 cat > /etc/apt/apt.conf.d/51ugly-upgrades << 'UPGRADES'
 // Ugly Stack — Auto-Update Konfiguration
 Unattended-Upgrade::Allowed-Origins {
@@ -314,7 +311,6 @@ acl = private
 RCLONE
 
 chown -R alex:alex "$STACK_DIR"
-# openclaw-data + n8n-data: owner=1000 (container node user), group=alex (lesbar für Backup)
 fix_volume_ownership "$STACK_DIR/openclaw-data"
 fix_volume_ownership "$STACK_DIR/n8n-data"
 
@@ -352,7 +348,6 @@ if [ -n "$LATEST" ]; then
 
   rm -f "/tmp/$LATEST"
 
-  # n8n
   mkdir -p "$STACK_DIR/n8n-data"
   [ -f "$STAGING/n8n-data/workflows-backup.json" ] && \
     cp "$STAGING/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/"
@@ -360,7 +355,6 @@ if [ -n "$LATEST" ]; then
     cp "$STAGING/n8n-data/credentials-backup.json" "$STACK_DIR/n8n-data/"
   fix_volume_ownership "$STACK_DIR/n8n-data"
 
-  # openclaw
   if ls "$STAGING/openclaw-data/"*.tar.gz &>/dev/null; then
     mkdir -p "$STACK_DIR/openclaw-data"
     tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
@@ -369,12 +363,10 @@ if [ -n "$LATEST" ]; then
     log "OpenClaw Backup wiederhergestellt"
   fi
 
-  # nginx
   mkdir -p "$STACK_DIR/nginx/conf.d"
   [ -d "$STAGING/nginx/conf.d" ] && \
     cp -r "$STAGING/nginx/conf.d/." "$STACK_DIR/nginx/conf.d/"
 
-  # www
   mkdir -p "$STACK_DIR/www"
   [ -d "$STAGING/www" ] && \
     cp -r "$STAGING/www/." "$STACK_DIR/www/"
@@ -459,14 +451,15 @@ docker compose up -d
 sleep 30
 docker compose ps
 
-# Ownership nach Stack-Start wiederherstellen (Docker kann sie beim Start ändern)
 fix_volume_ownership "$STACK_DIR/openclaw-data"
 fix_volume_ownership "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership gesetzt (1000:alex, g+rX)"
 
-# ── Portainer Admin-Passwort via Container-IP setzen ──────────────────
+# ── Portainer Admin via API einrichten ─────────────────────────────────
 source "$STACK_DIR/.env"
-PORTAINER_ADMIN_PASSWORD="${PORTAINER_ADMIN_PASSWORD:-Ugly\$Portainer\$VPSDocker}"
+
+[ -z "$PORTAINER_ADMIN_PASSWORD" ] \
+  && fail "PORTAINER_ADMIN_PASSWORD fehlt in .env — bitte via set-secret.sh setzen"
 
 info "Portainer Admin-Passwort setzen..."
 PORTAINER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' portainer 2>/dev/null || echo "")
@@ -486,12 +479,12 @@ if [ -n "$PORTAINER_IP" ]; then
     -H "Content-Type: application/json" \
     -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" \
     > /dev/null 2>&1 || true
-  log "Portainer Admin gesetzt: admin / PORTAINER_ADMIN_PASSWORD"
+  log "Portainer Admin-User 'admin' eingerichtet"
 else
-  warn "Portainer Container-IP nicht gefunden — Passwort manuell setzen"
+  warn "Portainer Container-IP nicht gefunden — Admin manuell einrichten"
 fi
 
-# ── n8n Workflows + Credentials importieren + aktivieren ───────────────
+# ── n8n Workflows + Credentials importieren + aktivieren ────────────────
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren — warte bis n8n bereit..."
   for i in $(seq 1 24); do
@@ -547,10 +540,7 @@ echo ""
 echo "  Stack: $STACK_DIR"
 echo "  User:  alex (sudo, docker)"
 echo ""
-echo "  Portainer Login:"
-echo "    URL:      https://portainer.beautymolt.com"
-echo "    User:     admin"
-echo "    Passwort: Ugly\$Portainer\$VPSDocker"
+echo "  Portainer: https://portainer.beautymolt.com (admin / siehe .env)"
 echo ""
 echo "  Zeitplan (UTC):"
 echo "    02:00 — Backup → R2 + .env → GitHub + Status-Mail"
