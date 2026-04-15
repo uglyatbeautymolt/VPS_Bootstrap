@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260413_1325
+# Version: V.20260415_1
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,13 +29,26 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260413_1325"
+BOOTSTRAP_VERSION="V.20260415_1"
+
+# ─────────────────────────────────────────────────────────────
+# HILFSFUNKTION: Volume-Ownership setzen
+# openclaw-data und n8n-data: owner=1000 (node/container), group=alex(1001)
+# chmod g+rX damit alex lesen kann ohne sudo (Backup-Checksummen)
+# ─────────────────────────────────────────────────────────────
+fix_volume_ownership() {
+  local dir="$1"
+  local alex_gid
+  alex_gid=$(id -g alex 2>/dev/null || echo "1001")
+  chown -R 1000:${alex_gid} "$dir"
+  chmod -R g+rX "$dir"
+}
 
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║ Ugly Stack — Bootstrap                   ║"
 echo "║ beautymolt.com                           ║"
-echo "║ ${BOOTSTRAP_VERSION}                  ║"
+echo "║ ${BOOTSTRAP_VERSION}                     ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -158,7 +171,7 @@ fi
 usermod -aG docker alex
 log "User 'alex' zur docker-Gruppe hinzugefügt"
 
-# ── unattended-upgrades konfigurieren ────────────────────────
+# ── unattended-upgrades konfigurieren ────────────────────────────────────
 cat > /etc/apt/apt.conf.d/51ugly-upgrades << 'UPGRADES'
 // Ugly Stack — Auto-Update Konfiguration
 Unattended-Upgrade::Allowed-Origins {
@@ -248,7 +261,7 @@ cat > /etc/sudoers.d/alex-ugly-stack << SUDOERS
 # sudo Passwort-Timeout: 60 Minuten
 Defaults:alex timestamp_timeout=60
 
-# Backup: tar auf openclaw-data (Ownership 1000:1000 → braucht root)
+# Backup: tar auf openclaw-data (Ownership 1000:alex → braucht root)
 alex ALL=(root) NOPASSWD: /bin/tar -czf * -C ${STACK_DIR}/openclaw-data .
 
 # Lesen: openclaw-data Dateien inspizieren ohne Passwort
@@ -301,8 +314,9 @@ acl = private
 RCLONE
 
 chown -R alex:alex "$STACK_DIR"
-chown -R 1000:1000 "$STACK_DIR/openclaw-data"
-chown -R 1000:1000 "$STACK_DIR/n8n-data"
+# openclaw-data + n8n-data: owner=1000 (container node user), group=alex (lesbar für Backup)
+fix_volume_ownership "$STACK_DIR/openclaw-data"
+fix_volume_ownership "$STACK_DIR/n8n-data"
 
 sudo -u alex git -C "$STACK_DIR" remote set-url origin \
   "https://${GITHUB_TOKEN}@github.com/uglyatbeautymolt/VPS_Bootstrap.git"
@@ -344,13 +358,13 @@ if [ -n "$LATEST" ]; then
     cp "$STAGING/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/"
   [ -f "$STAGING/n8n-data/credentials-backup.json" ] && \
     cp "$STAGING/n8n-data/credentials-backup.json" "$STACK_DIR/n8n-data/"
-  chown -R 1000:1000 "$STACK_DIR/n8n-data"
+  fix_volume_ownership "$STACK_DIR/n8n-data"
 
   # openclaw
   if ls "$STAGING/openclaw-data/"*.tar.gz &>/dev/null; then
     mkdir -p "$STACK_DIR/openclaw-data"
     tar -xzf "$STAGING/openclaw-data/"*.tar.gz -C "$STACK_DIR/openclaw-data/"
-    chown -R 1000:1000 "$STACK_DIR/openclaw-data"
+    fix_volume_ownership "$STACK_DIR/openclaw-data"
     BACKUP_RESTORED=true
     log "OpenClaw Backup wiederhergestellt"
   fi
@@ -415,7 +429,7 @@ if changed:
 else:
     print("  openclaw.json bereits korrekt")
 PYFIX
-  chown 1000:1000 "$STACK_DIR/openclaw-data/openclaw.json"
+  chown 1000:$(id -g alex) "$STACK_DIR/openclaw-data/openclaw.json"
   log "openclaw.json geprüft"
 fi
 
@@ -445,12 +459,12 @@ docker compose up -d
 sleep 30
 docker compose ps
 
-chown -R 1000:1000 "$STACK_DIR/openclaw-data"
-chown -R 1000:1000 "$STACK_DIR/n8n-data"
-log "openclaw-data + n8n-data Ownership auf 1000:1000 gesetzt"
+# Ownership nach Stack-Start wiederherstellen (Docker kann sie beim Start ändern)
+fix_volume_ownership "$STACK_DIR/openclaw-data"
+fix_volume_ownership "$STACK_DIR/n8n-data"
+log "openclaw-data + n8n-data Ownership gesetzt (1000:alex, g+rX)"
 
-# ── Portainer Admin-Passwort via Container-IP setzen ─────────
-# localhost:9000 ist vom Host nicht erreichbar — Container-IP verwenden
+# ── Portainer Admin-Passwort via Container-IP setzen ──────────────────
 source "$STACK_DIR/.env"
 PORTAINER_ADMIN_PASSWORD="${PORTAINER_ADMIN_PASSWORD:-Ugly\$Portainer\$VPSDocker}"
 
@@ -458,7 +472,6 @@ info "Portainer Admin-Passwort setzen..."
 PORTAINER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' portainer 2>/dev/null || echo "")
 
 if [ -n "$PORTAINER_IP" ]; then
-  # Warten bis Portainer API antwortet
   for i in $(seq 1 24); do
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
       "http://${PORTAINER_IP}:9000/api/status" 2>/dev/null || echo "000")
@@ -469,7 +482,6 @@ if [ -n "$PORTAINER_IP" ]; then
     warn "Portainer noch nicht bereit — warte 5s ($i/24)"
     sleep 5
   done
-  # Admin-User anlegen (schlägt still fehl wenn bereits vorhanden)
   curl -s -X POST "http://${PORTAINER_IP}:9000/api/users/admin/init" \
     -H "Content-Type: application/json" \
     -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" \
@@ -479,7 +491,7 @@ else
   warn "Portainer Container-IP nicht gefunden — Passwort manuell setzen"
 fi
 
-# ── n8n Workflows + Credentials importieren + aktivieren ─────
+# ── n8n Workflows + Credentials importieren + aktivieren ───────────────
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren — warte bis n8n bereit..."
   for i in $(seq 1 24); do
@@ -496,7 +508,6 @@ if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   docker exec n8n n8n import:credentials --input=/tmp/credentials-backup.json
   rm -f "$STACK_DIR/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/credentials-backup.json"
   log "n8n Workflows + Credentials importiert"
-  # Alle Workflows aktivieren — IMAP Trigger läuft sonst nach Import nicht
   docker exec n8n n8n workflow activate --all 2>/dev/null || true
   log "n8n Workflows aktiviert (IMAP Trigger aktiv)"
 fi
@@ -530,7 +541,7 @@ log "Firewall konfiguriert"
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║ Installation abgeschlossen!              ║"
-echo "║ ${BOOTSTRAP_VERSION}                  ║"
+echo "║ ${BOOTSTRAP_VERSION}                     ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 echo "  Stack: $STACK_DIR"
