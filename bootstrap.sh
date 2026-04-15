@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260415_2
+# Version: V.20260415_3
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260415_2"
+BOOTSTRAP_VERSION="V.20260415_3"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
@@ -465,9 +465,10 @@ info "Portainer Admin-Passwort setzen..."
 PORTAINER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' portainer 2>/dev/null || echo "")
 
 if [ -n "$PORTAINER_IP" ]; then
+  # Bereitschaft prüfen via /api/system/status (nicht deprecated)
   for i in $(seq 1 24); do
     HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-      "http://${PORTAINER_IP}:9000/api/status" 2>/dev/null || echo "000")
+      "http://${PORTAINER_IP}:9000/api/system/status" 2>/dev/null || echo "000")
     if [ "$HTTP_CODE" = "200" ]; then
       log "Portainer API bereit"
       break
@@ -475,11 +476,16 @@ if [ -n "$PORTAINER_IP" ]; then
     warn "Portainer noch nicht bereit — warte 5s ($i/24)"
     sleep 5
   done
-  curl -s -X POST "http://${PORTAINER_IP}:9000/api/users/admin/init" \
+  INIT_RESPONSE=$(curl -s -X POST "http://${PORTAINER_IP}:9000/api/users/admin/init" \
     -H "Content-Type: application/json" \
-    -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" \
-    > /dev/null 2>&1 || true
-  log "Portainer Admin-User 'admin' eingerichtet"
+    -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}")
+  if echo "$INIT_RESPONSE" | grep -q "jwt"; then
+    log "Portainer Admin-User 'admin' eingerichtet"
+  elif echo "$INIT_RESPONSE" | grep -q "already exists"; then
+    warn "Portainer Admin-User existiert bereits — Passwort aus .env verwenden"
+  else
+    warn "Portainer Init unerwartet: $INIT_RESPONSE"
+  fi
 else
   warn "Portainer Container-IP nicht gefunden — Admin manuell einrichten"
 fi
@@ -501,8 +507,10 @@ if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   docker exec n8n n8n import:credentials --input=/tmp/credentials-backup.json
   rm -f "$STACK_DIR/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/credentials-backup.json"
   log "n8n Workflows + Credentials importiert"
-  docker exec n8n n8n workflow activate --all 2>/dev/null || true
-  log "n8n Workflows aktiviert (IMAP Trigger aktiv)"
+  # Workflows aktivieren — korrekte Syntax für aktuelle n8n Versionen
+  docker exec n8n n8n update:workflow --all --active=true 2>/dev/null || \
+    warn "n8n Workflow-Aktivierung fehlgeschlagen — bitte manuell in UI aktivieren"
+  log "n8n Workflows aktiviert"
 fi
 
 if [ -f "$STACK_DIR/searxng-data/settings.yml" ]; then
