@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260415_5
+# Version: V.20260415_6
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260415_5"
+BOOTSTRAP_VERSION="V.20260415_6"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
@@ -456,6 +456,8 @@ fix_volume_ownership "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership gesetzt (1000:alex, g+rX)"
 
 # ── Portainer Admin via API einrichten ─────────────────────────────────
+# jq wird verwendet damit Sonderzeichen im Passwort (z.B. $) korrekt
+# escaped werden und nicht von der Shell expandiert werden.
 source "$STACK_DIR/.env"
 
 [ -z "$PORTAINER_ADMIN_PASSWORD" ] \
@@ -475,10 +477,18 @@ if [ -n "$PORTAINER_IP" ]; then
     warn "Portainer noch nicht bereit — warte 5s ($i/24)"
     sleep 5
   done
+
+  # jq baut JSON sicher — Sonderzeichen wie $ werden korrekt escaped
+  PORTAINER_JSON=$(jq -n \
+    --arg user "admin" \
+    --arg pass "$PORTAINER_ADMIN_PASSWORD" \
+    '{"Username":$user,"Password":$pass}')
+
   INIT_RESPONSE=$(curl -s -X POST "http://${PORTAINER_IP}:9000/api/users/admin/init" \
     -H "Content-Type: application/json" \
-    -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}")
-  if echo "$INIT_RESPONSE" | grep -q "jwt"; then
+    -d "$PORTAINER_JSON")
+
+  if echo "$INIT_RESPONSE" | grep -q "Id"; then
     log "Portainer Admin-User 'admin' eingerichtet"
   elif echo "$INIT_RESPONSE" | grep -q "already exists"; then
     warn "Portainer Admin-User existiert bereits — Passwort aus .env verwenden"
