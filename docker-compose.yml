@@ -129,14 +129,12 @@ services:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: unless-stopped
-    environment:
-      - TRUSTED_ORIGINS=https://portainer.beautymolt.com
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer-data:/data
     networks:
       - ugly-net
-    command: --http-enabled
+    command: --http-enabled --trusted-origins=https://portainer.beautymolt.com
 
 volumes:
   portainer-data:
