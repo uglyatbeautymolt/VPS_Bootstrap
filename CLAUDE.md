@@ -3,6 +3,24 @@
 VPS: beautymolt.com (Hostinger, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
 
+## Philosophie — VPS-Portabilität
+
+Das Ziel ist maximale Unabhängigkeit vom Hoster. Der Stack muss auf jedem frischen Ubuntu 24.04 VPS — egal ob Hostinger, Hetzner oder ein anderer Anbieter — mit einem einzigen Befehl vollständig wiederherstellbar sein. Die einzigen drei Eingaben beim Bootstrap sind Bitwarden E-Mail, Master-Passwort und ein Passwort für User `alex`. Alles andere — Secrets, Konfiguration, Daten — kommt automatisch aus `.env.gpg` (GitHub) und dem neuesten Backup (Cloudflare R2).
+
+Aktuell laufen zwei VPS parallel (Hostinger + Hetzner). Das erlaubt es, jederzeit auf einen anderen Hoster zu wechseln oder einen neuen VPS hochzufahren, ohne Datenverlust oder manuelle Konfiguration.
+
+**Was hosterunabhängig ist:**
+- Alle Secrets → `.env.gpg` im GitHub Repo (verschlüsselt)
+- Alle Daten → Cloudflare R2 (Backups, GPG-verschlüsselt)
+- DNS + Tunnel → Cloudflare (hosterunabhängig)
+- Domains → beautymolt.com via Cloudflare
+
+**Was beim Wechsel zu tun ist:**
+1. `bash backup/backup-master.sh` auf altem VPS
+2. `bootstrap.sh` auf neuem VPS ausführen
+3. Cloudflare Tunnel-Route auf neuen VPS umstellen
+4. Alten VPS abschalten
+
 ## Services
 
 | Container | URL | Port |
@@ -24,6 +42,7 @@ Docker Bridge-Netzwerk: **ugly-net**
 `.env.example` wird nie benötigt — nur `.env.gpg` zählt.
 Scripts immer mit `bash scriptname.sh` — nie `./` (Git setzt kein +x).
 sudo-Timeout: 60 Min (einmal Passwort → 1h gültig).
+`PORTAINER_ADMIN_PASSWORD` muss in `.env` vorhanden sein — bootstrap bricht sonst ab.
 
 ## E-Mail Workflow
 
@@ -85,6 +104,7 @@ Checksummen: `backup/.checksums` (in .gitignore)
 - HTTP intern (Port 9000) — nginx Proxy
 - TRUSTED_ORIGINS=portainer.beautymolt.com (CSRF-Fix für Reverse Proxy)
 - Volume: portainer-data (named volume, im Backup enthalten)
+- Login: admin / Passwort aus `.env` (`PORTAINER_ADMIN_PASSWORD`)
 
 ## Bootstrap
 
@@ -92,3 +112,4 @@ Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP falls neues Gerät), Passwor
 Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 60min,
 unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00.
 Volume-Ownership wird vollständig automatisch gesetzt — kein manueller Eingriff nötig.
+Bricht ab wenn `PORTAINER_ADMIN_PASSWORD` nicht in `.env` vorhanden — kein Fallback.
