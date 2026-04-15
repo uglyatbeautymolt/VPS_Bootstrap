@@ -125,13 +125,17 @@ Bricht ab wenn `PORTAINER_ADMIN_PASSWORD` nicht in `.env` vorhanden — kein Fal
 - Portainer Admin-Init: POST /api/users/admin/init — Bereitschaft prüfen via /api/system/status (nicht /api/status — deprecated)
 - n8n Workflow aktivieren: `n8n update:workflow --all --active=true` (nicht `workflow activate` — existiert nicht)
 
-## WICHTIG: Obsidian + openclaw — korrekte Architektur
+## ⚠️ VERSAGEN: Obsidian + CouchDB + openclaw (April 2026)
 
-CouchDB speichert Obsidian-Notizen als Binär-Chunks — nicht als lesbare Markdown-Dateien. openclaw braucht echte `.md`-Dateien auf dem Filesystem.
+**Grundfehler:** Die Architektur wurde nie vollständig durchdacht bevor mit der Implementation begonnen wurde. Das kostete Alex Zeit und Tokens.
 
-**Korrekte Architektur:**
+- CouchDB speichert Obsidian-Notizen als Binär-Chunks — NICHT als `.md`-Dateien. openclaw kann sie nicht lesen. Das hätte vor dem ersten Commit bekannt sein müssen.
+- Lösungen wurden mehrfach ohne Webrecherche vorgeschlagen und mussten revidiert werden.
+- CORS-Probleme mit Cloudflare Tunnel wurden nicht vorab recherchiert.
+
+**Korrekte Architektur für zukünftige Implementation:**
 1. Obsidian LiveSync + CouchDB → Sync Mac ↔ iPhone
 2. Syncthing → spiegelt Vault als `.md`-Dateien auf den VPS
-3. openclaw mountet Syncthing-Ordner als Volume → liest `.md`-Dateien direkt
+3. openclaw mountet Syncthing-Ordner → liest `.md`-Dateien direkt
 
-**Vor jeder Integration: Architektur vollständig durchdenken und recherchieren — nie mittendrin anfangen.**
+**Regel:** Architektur vollständig verstehen und dokumentieren, BEVOR eine einzige Zeile Code geschrieben oder committed wird. Jede Lösung zuerst recherchieren.
