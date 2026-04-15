@@ -39,6 +39,13 @@ Body: `{"message":"...","name":"Email","wakeMode":"now"}`
 - Hook Auth: `Authorization: Bearer` — nie `x-openclaw-token`
 - Debugging: `tail -50 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log`
 
+## Volume-Ownership
+
+- `openclaw-data` und `n8n-data`: Owner `1000:alex` (GID von alex), Permissions `g+rX`
+- `user: "1000:1000"` ist explizit in docker-compose.yml gesetzt → verhindert Ownership-Drift nach Watchtower-Updates
+- bootstrap.sh setzt Ownership automatisch via `fix_volume_ownership()` — nie manuell nötig
+- Bei unerwartetem Permission-Problem: `sudo chown -R 1000:$(id -g) ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data && sudo chmod -R g+rX ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data`
+
 ## Brevo
 
 - `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via **Brevo Skill**
@@ -62,7 +69,6 @@ Täglich 02:00 UTC via Cron → backup-master.sh
 
 Manuell: `bash backup/backup-master.sh`
 Checksummen: `backup/.checksums` (in .gitignore)
-openclaw-data Ownership: 1000:1000 → sudo nötig für Lesen/Schreiben.
 
 ## Automatische Updates — Zeitplan (UTC)
 
@@ -85,3 +91,4 @@ openclaw-data Ownership: 1000:1000 → sudo nötig für Lesen/Schreiben.
 Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP falls neues Gerät), Passwort für alex.
 Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 60min,
 unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00.
+Volume-Ownership wird vollständig automatisch gesetzt — kein manueller Eingriff nötig.

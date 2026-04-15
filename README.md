@@ -20,7 +20,7 @@ Das Script fragt nur nach:
 Alles andere kommt automatisch aus der verschlüsselten `.env.gpg` im Repo.
 Neuestes Backup wird automatisch von Cloudflare R2 wiederhergestellt.
 
-→ Alle Voraussetzungen, Secrets und Installationsdetails: **[BETRIEB.md — Erste Installation](./BETRIEB.md#1-erste-installation)**
+→ Detaillierte Installationsanleitung und Secrets-Übersicht: **[BETRIEB.md](./BETRIEB.md)**
 
 ---
 
@@ -35,42 +35,24 @@ Neuestes Backup wird automatisch von Cloudflare R2 wiederhergestellt.
 | [n8n.beautymolt.com](https://n8n.beautymolt.com) | n8n |
 | [www.beautymolt.com](https://www.beautymolt.com) | nginx Webserver |
 | [mail.beautymolt.com](https://mail.beautymolt.com) | Roundcube |
-| [portainer.beautymolt.com](https://portainer.beautymolt.com) | Portainer (Docker Management) |
+| [portainer.beautymolt.com](https://portainer.beautymolt.com) | Portainer |
 
 ## Docker Netzwerk
 
-Alle Container laufen im internen Bridge-Netzwerk **`ugly-net`**. Nach aussen ist kein Port offen — der einzige Eingang ist der Cloudflare Tunnel.
+Alle Container laufen im internen Bridge-Netzwerk **`ugly-net`**. Nach aussen ist kein Port offen — einziger Eingang ist der Cloudflare Tunnel.
 
-```
-Internet
-   │
-   ▼
-cloudflared (Cloudflare Tunnel)
-   │
-   ▼
-nginx :80  (Reverse Proxy)
-   ├──► openclaw  :18789   (claw.beautymolt.com)
-   ├──► searxng   :8080    (search.beautymolt.com)
-   ├──► n8n       :5678    (n8n.beautymolt.com)
-   ├──► nginx www          (www.beautymolt.com)
-   ├──► roundcube :80      (mail.beautymolt.com)
-   └──► portainer :9000    (portainer.beautymolt.com)
+| Container | Port | User (UID) | Notes |
+|-----------|------|------------|-------|
+| cloudflared | — | 65532:65532 | Tunnel-Eingang |
+| nginx | 80 | root | Reverse Proxy |
+| openclaw | 18789 | node (1000:1000) | `user:` explizit gesetzt |
+| searxng | 8080 | 977 | |
+| n8n | 5678 | node (1000:1000) | `user:` explizit gesetzt |
+| roundcube | 80 | www-data | |
+| portainer | 9000 | root | |
+| watchtower | — | root | Socket-Zugriff nötig |
 
-watchtower  — kein HTTP, nur Docker Socket
-```
-
-| Container | Interner Host | Port | User (UID) | Netzwerk |
-|-----------|--------------|------|------------|----------|
-| cloudflared | cloudflared | — | 65532:65532 | ugly-net |
-| nginx | nginx | 80 | root | ugly-net |
-| openclaw | openclaw | 18789 | node (1000:1000) | ugly-net |
-| searxng | searxng | 8080 | 977 | ugly-net |
-| n8n | n8n | 5678 | node (1000:1000) | ugly-net |
-| roundcube | roundcube | 80 | www-data | ugly-net |
-| portainer | portainer | 9000 | root | ugly-net |
-| watchtower | watchtower | — | root | ugly-net |
-
-> **Hinweis:** `user: "1000:1000"` ist explizit gesetzt bei openclaw und n8n. Beide Images laufen als `node` (UID 1000). Die explizite Deklaration verhindert Volume-Ownership-Drift nach Watchtower-Updates.
+> `user: "1000:1000"` ist bei openclaw und n8n explizit gesetzt. Das verhindert Volume-Ownership-Drift nach Watchtower-Updates — bootstrap.sh setzt die Ownership vollautomatisch.
 
 ## Automatische Updates — Zeitplan (UTC)
 
@@ -96,38 +78,29 @@ docker compose logs -f
 docker compose restart
 docker compose pull && docker compose up -d
 
-# Container-Shell
-docker exec -it openclaw bash
-docker exec -it n8n sh
-
 # Backup manuell
 bash backup/backup-master.sh
 
 # Restore
 bash backup/restore/restore-master.sh list
 bash backup/restore/restore-master.sh
-bash backup/restore/restore-master.sh n8n
-
-# Watchtower manuell auslösen
-docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-  nickfedor/watchtower:latest --run-once openclaw searxng nginx roundcube
 ```
 
 ## Backup
 
-- Täglich 02:00 UTC via Cron
-- Checksummen-basiert — nur bei Änderungen wird R2-Backup erstellt
+- Täglich 02:00 UTC — checksummen-basiert (nur bei Änderungen)
 - Sonntags: WEEKLY-Backup unabhängig von Änderungen
 - GPG AES256 verschlüsselt → Cloudflare R2
-- 7 normale + 4 WEEKLY Backups werden behalten
-- .env: bei Änderung als .env.gpg → GitHub gepusht
+- 7 normale + 4 WEEKLY Backups
 - Status-Mail nach jedem Lauf via Brevo
 
 ## Dokumentation
 
-Vollständiges Betriebshandbuch: **[BETRIEB.md](./BETRIEB.md)**
-
-Neuen Container hinzufügen: **[backup/NEUES_MODUL.md](./backup/NEUES_MODUL.md)**
+| Dokument | Inhalt |
+|----------|--------|
+| **[BETRIEB.md](./BETRIEB.md)** | Vollständiges Betriebshandbuch: Secrets, Troubleshooting, Migration |
+| **[CLAUDE.md](./CLAUDE.md)** | Technischer Kontext für Claude-Sessions |
+| **[backup/NEUES_MODUL.md](./backup/NEUES_MODUL.md)** | Neuen Container + Backup-Modul hinzufügen |
 
 ## Dateistruktur
 
@@ -137,11 +110,9 @@ Neuen Container hinzufügen: **[backup/NEUES_MODUL.md](./backup/NEUES_MODUL.md)*
 ├── set-secret.sh             ← Secret aktualisieren
 ├── docker-compose.yml        ← Stack-Definition
 ├── architecture.svg          ← Architektur-Diagramm
-├── README.md
-├── BETRIEB.md                ← Betriebshandbuch
 ├── nginx/conf.d/
-├── openclaw-data/            ← Volume (owner: 1000:1000)
-├── n8n-data/                 ← Volume (owner: 1000:1000)
+├── openclaw-data/            ← Volume (owner: 1000:alex, g+rX)
+├── n8n-data/                 ← Volume (owner: 1000:alex, g+rX)
 ├── searxng-data/             ← Volume
 ├── www/                      ← Volume
 └── backup/
