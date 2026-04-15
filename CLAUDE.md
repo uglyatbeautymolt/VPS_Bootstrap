@@ -71,7 +71,6 @@ Body: `{"message":"...","name":"Email","wakeMode":"now"}`
 - `user: "1000:1000"` ist explizit in docker-compose.yml gesetzt → verhindert Ownership-Drift nach Watchtower-Updates
 - bootstrap.sh setzt Ownership automatisch via `fix_volume_ownership()` — nie manuell nötig
 - Bei unerwartetem Permission-Problem: `sudo chown -R 1000:$(id -g) ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data && sudo chmod -R g+rX ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data`
-- `couchdb-etc/` gehört uid 5984 — Änderungen immer mit `sudo`
 
 ## Brevo
 
@@ -126,21 +125,13 @@ Bricht ab wenn `PORTAINER_ADMIN_PASSWORD` nicht in `.env` vorhanden — kein Fal
 - Portainer Admin-Init: POST /api/users/admin/init — Bereitschaft prüfen via /api/system/status (nicht /api/status — deprecated)
 - n8n Workflow aktivieren: `n8n update:workflow --all --active=true` (nicht `workflow activate` — existiert nicht)
 
-## GESCHEITERTE INTEGRATION: Obsidian + CouchDB (April 2026)
+## WICHTIG: Obsidian + openclaw — korrekte Architektur
 
-**Was versucht wurde:** CouchDB als Obsidian LiveSync Backend + openclaw liest Vault direkt.
+CouchDB speichert Obsidian-Notizen als Binär-Chunks — nicht als lesbare Markdown-Dateien. openclaw braucht echte `.md`-Dateien auf dem Filesystem.
 
-**Warum es scheiterte:**
-- CouchDB speichert Obsidian-Notizen intern als verschlüsselte Binär-Chunks — NICHT als lesbare Markdown-Dateien
-- openclaw kann CouchDB-Daten nicht direkt lesen — es braucht echte `.md`-Dateien auf dem Filesystem
-- Die Verbindung CouchDB → Filesystem existiert nicht ohne zusätzlichen Sync-Layer
-- CORS-Probleme mit Cloudflare Tunnel: Cloudflare fügt eigene CORS-Header hinzu → Duplikate → LiveSync blockiert
-- Viele widersprüchliche Lösungsversuche ohne vorherige Recherche — Zeit- und Geldverschwendung
+**Korrekte Architektur:**
+1. Obsidian LiveSync + CouchDB → Sync Mac ↔ iPhone
+2. Syncthing → spiegelt Vault als `.md`-Dateien auf den VPS
+3. openclaw mountet Syncthing-Ordner als Volume → liest `.md`-Dateien direkt
 
-**Was korrekt wäre (für zukünftige Implementation):**
-1. Obsidian LiveSync + CouchDB = Sync zwischen Geräten (Mac ↔ iPhone) ✓
-2. Syncthing oder ähnliches = Vault als echte `.md`-Dateien auf VPS spiegeln
-3. openclaw mountet den Syncthing-Ordner als Volume → liest `.md`-Dateien direkt
-4. Diese drei Komponenten müssen VOR der Implementation vollständig verstanden und recherchiert sein
-
-**Lektion:** Architektur immer vollständig durchdenken und dokumentieren BEVOR mit der Implementation begonnen wird. Nie Lösungen vorschlagen ohne vorherige Webrecherche.
+**Vor jeder Integration: Architektur vollständig durchdenken und recherchieren — nie mittendrin anfangen.**
