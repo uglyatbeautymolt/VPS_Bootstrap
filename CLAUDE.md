@@ -1,13 +1,11 @@
 # Ugly Stack
 
-VPS: beautymolt.com (Hostinger, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
+VPS: beautymolt.com (Hetzner CX22, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
 
 ## Philosophie — VPS-Portabilität
 
 Das Ziel ist maximale Unabhängigkeit vom Hoster. Der Stack muss auf jedem frischen Ubuntu 24.04 VPS — egal ob Hostinger, Hetzner oder ein anderer Anbieter — mit einem einzigen Befehl vollständig wiederherstellbar sein. Die einzigen drei Eingaben beim Bootstrap sind Bitwarden E-Mail, Master-Passwort und ein Passwort für User `alex`. Alles andere — Secrets, Konfiguration, Daten — kommt automatisch aus `.env.gpg` (GitHub) und dem neuesten Backup (Cloudflare R2).
-
-Aktuell laufen zwei VPS parallel (Hostinger + Hetzner). Das erlaubt es, jederzeit auf einen anderen Hoster zu wechseln oder einen neuen VPS hochzufahren, ohne Datenverlust oder manuelle Konfiguration.
 
 **Was hosterunabhängig ist:**
 - Alle Secrets → `.env.gpg` im GitHub Repo (verschlüsselt)
@@ -102,8 +100,10 @@ Checksummen: `backup/.checksums` (in .gitignore)
 
 - URL: https://portainer.beautymolt.com
 - HTTP intern (Port 9000) — nginx Proxy
-- TRUSTED_ORIGINS=portainer.beautymolt.com (CSRF-Fix für Reverse Proxy)
-- Volume: portainer-data (named volume, im Backup enthalten)
+- `--trusted-origins portainer.beautymolt.com` als CLI-Flag (OHNE https://) — als command in docker-compose.yml
+- TRUSTED_ORIGINS als Env-Var funktioniert NICHT in 2.39 — nur CLI-Flag verwenden
+- Volume: `ugly-stack_portainer-data` (named volume, Compose-Projektname als Präfix)
+- Passwort-Reset: `docker stop portainer && docker run --rm -v ugly-stack_portainer-data:/data portainer/helper-reset-password --password 'PASSWORT' && docker start portainer` (einfache Anführungszeichen wegen Sonderzeichen)
 - Login: admin / Passwort aus `.env` (`PORTAINER_ADMIN_PASSWORD`)
 
 ## Bootstrap
@@ -113,3 +113,5 @@ Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 
 unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00.
 Volume-Ownership wird vollständig automatisch gesetzt — kein manueller Eingriff nötig.
 Bricht ab wenn `PORTAINER_ADMIN_PASSWORD` nicht in `.env` vorhanden — kein Fallback.
+- Portainer Admin-Init: POST /api/users/admin/init — Bereitschaft prüfen via /api/system/status (nicht /api/status — deprecated)
+- n8n Workflow aktivieren: `n8n update:workflow --all --active=true` (nicht `workflow activate` — existiert nicht)
