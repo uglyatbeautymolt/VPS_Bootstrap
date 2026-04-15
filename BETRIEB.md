@@ -23,22 +23,22 @@ Die `.env` liegt verschlüsselt als `.env.gpg` im Repo. `BACKUP_GPG_PASSWORD` un
 
 | Secret | Wo finden |
 |--------|----------|
-| `CLOUDFLARE_TUNNEL_TOKEN` | Cloudflare → Zero Trust → Tunnels → beautymoltTunnel |
-| `OPENROUTER_API_KEY` | openrouter.ai → Keys |
+| `CLOUDFLARE_TUNNEL_TOKEN` | [Cloudflare](https://dash.cloudflare.com) → Zero Trust → Tunnels → beautymoltTunnel |
+| `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai) → Keys |
 | `TELEGRAM_BOT_TOKEN` | @BotFather auf Telegram — bestehenden weiterverwenden |
 | `OPENCLAW_GATEWAY_TOKEN` | Selbst wählen — bestehenden beibehalten |
 | `N8N_BASIC_AUTH_USER` | Selbst wählen |
 | `N8N_BASIC_AUTH_PASSWORD` | Selbst wählen |
 | `N8N_ENCRYPTION_KEY` | `openssl rand -hex 16` — **bestehenden beibehalten!** |
-| `ZOHO_SMTP_USER` | Zoho Mail Login E-Mail |
+| `ZOHO_SMTP_USER` | [Zoho Mail](https://mail.zoho.eu) Login E-Mail |
 | `ZOHO_SMTP_PASSWORD` | Zoho Mail → Einstellungen → SMTP |
 | `BREVO_SMTP_USER` | `a50340001@smtp-brevo.com` |
-| `BREVO_SMTP_API_KEY` | Brevo → SMTP & API → API Keys (xsmtpsib-...) |
-| `BREVO_KEY` | Brevo → SMTP & API → API Keys (xkeysib-...) |
+| `BREVO_SMTP_API_KEY` | [Brevo](https://app.brevo.com) → SMTP & API → API Keys (xsmtpsib-...) |
+| `BREVO_KEY` | [Brevo](https://app.brevo.com) → SMTP & API → API Keys (xkeysib-...) |
 | `PORTAINER_ADMIN_PASSWORD` | Selbst wählen — Portainer Admin-Login |
-| `BACKUP_GPG_PASSWORD` | Bitwarden — wird automatisch geholt |
-| `CF_R2_ACCESS_KEY` | Cloudflare → R2 → Manage API Tokens |
-| `CF_R2_SECRET_KEY` | Cloudflare → R2 → Manage API Tokens |
+| `BACKUP_GPG_PASSWORD` | [Bitwarden](https://vault.bitwarden.com) — wird automatisch geholt |
+| `CF_R2_ACCESS_KEY` | [Cloudflare](https://dash.cloudflare.com) → R2 → Manage API Tokens |
+| `CF_R2_SECRET_KEY` | [Cloudflare](https://dash.cloudflare.com) → R2 → Manage API Tokens |
 | `CF_R2_BUCKET` | Name des R2 Buckets |
 | `CF_R2_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
 
@@ -215,22 +215,21 @@ sudo chown -R 1000:$(id -g) ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data
 sudo chmod -R g+rX ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data
 ```
 
-### Portainer-Passwort unbekannt
+### Portainer-Passwort zurücksetzen
 ```bash
-# Passwort aus .env lesen
-grep PORTAINER_ADMIN_PASSWORD ~/ugly-stack/.env
+# Passwort direkt setzen (einfache Anführungszeichen wegen Sonderzeichen!)
+docker stop portainer && \
+docker run --rm \
+  -v ugly-stack_portainer-data:/data \
+  portainer/helper-reset-password \
+  --password 'NEUES_PASSWORT' && \
+docker start portainer
 
-# Portainer zurücksetzen (löscht alle Portainer-Daten)
-docker compose stop portainer
-sudo rm -rf /var/lib/docker/volumes/ugly-stack_portainer-data/_data
-docker compose up -d portainer
-# bootstrap-Logik manuell nachholen:
-PORTAINER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' portainer)
-source ~/ugly-stack/.env
-curl -s -X POST "http://${PORTAINER_IP}:9000/api/users/admin/init" \
-  -H "Content-Type: application/json" \
-  -d "{\"Username\":\"admin\",\"Password\":\"${PORTAINER_ADMIN_PASSWORD}\"}" | jq .
+# Danach .env aktualisieren
+bash set-secret.sh PORTAINER_ADMIN_PASSWORD 'NEUES_PASSWORT'
 ```
+
+> **Wichtig:** Passwort immer in einfachen Anführungszeichen übergeben — Sonderzeichen wie `$` werden sonst von bash expandiert.
 
 ---
 
@@ -261,7 +260,7 @@ docker compose logs --tail=30
 
 ### Schritt 4 — Cloudflare Tunnel-Route auf neuen VPS umstellen
 
-**Erst wenn der neue VPS läuft!** Dashboard → Zero Trust → Networks → Tunnels → beautymoltTunnel → Edit → Routes
+**Erst wenn der neue VPS läuft!** [Cloudflare Dashboard](https://dash.cloudflare.com) → Zero Trust → Networks → Tunnels → beautymoltTunnel → Edit → Routes
 
 | Subdomain | Service |
 |-----------|--------|

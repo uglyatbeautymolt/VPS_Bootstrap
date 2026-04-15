@@ -39,6 +39,15 @@ Neuestes Backup wird automatisch von Cloudflare R2 wiederhergestellt.
 | [mail.beautymolt.com](https://mail.beautymolt.com) | Roundcube |
 | [portainer.beautymolt.com](https://portainer.beautymolt.com) | Portainer |
 
+## Externe Services
+
+| Service | Link | Zweck |
+|---------|------|-------|
+| Cloudflare | [dash.cloudflare.com](https://dash.cloudflare.com) | DNS, Tunnel, R2 Backups, Secrets Store |
+| Bitwarden | [vault.bitwarden.com](https://vault.bitwarden.com) | BACKUP_GPG_PASSWORD, GITHUB_TOKEN |
+| Brevo | [app.brevo.com](https://app.brevo.com) | E-Mail-Versand (SMTP + API) |
+| Zoho Mail | [mail.zoho.eu](https://mail.zoho.eu) | E-Mail-Empfang (ugly@beautymolt.com) |
+
 ## Docker Netzwerk
 
 Alle Container laufen im internen Bridge-Netzwerk **`ugly-net`**. Nach aussen ist kein Port offen — einziger Eingang ist der Cloudflare Tunnel.

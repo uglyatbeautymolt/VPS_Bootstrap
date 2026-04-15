@@ -34,6 +34,15 @@ Das Ziel ist maximale Unabhängigkeit vom Hoster. Der Stack muss auf jedem frisc
 
 Docker Bridge-Netzwerk: **ugly-net**
 
+## Externe Services
+
+| Service | Link | Zweck |
+|---------|------|-------|
+| Cloudflare | dash.cloudflare.com | DNS, Tunnel, R2 Backups, Secrets Store |
+| Bitwarden | vault.bitwarden.com | BACKUP_GPG_PASSWORD, GITHUB_TOKEN |
+| Brevo | app.brevo.com | E-Mail-Versand (SMTP + API) |
+| Zoho Mail | mail.zoho.eu | E-Mail-Empfang (ugly@beautymolt.com) |
+
 ## Secrets
 
 `.env` auf VPS → `.env.gpg` im Repo (GPG). Update: `bash set-secret.sh NAME "wert"`
