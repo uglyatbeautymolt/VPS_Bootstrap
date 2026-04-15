@@ -3,6 +3,7 @@
   <style>
     .th { font-size: 14px; font-weight: 500; fill: #2C2C2A; }
     .ts { font-size: 12px; font-weight: 400; fill: #5F5E5A; }
+    .tu { font-size: 10px; font-weight: 400; fill: #888; }
     .c-gray-fill   { fill: #F1EFE8; stroke: #5F5E5A; }
     .c-blue-fill   { fill: #E6F1FB; stroke: #185FA5; }
     .c-blue-dark   { fill: #B5D4F4; stroke: #185FA5; }
@@ -43,7 +44,7 @@
 <text class="th th-gray" x="340" y="47" text-anchor="middle">Hostinger VPS — Ubuntu 24.04</text>
 <text class="ts ts-gray" x="340" y="64" text-anchor="middle">root + user alex</text>
 
-<!-- Docker Engine — endet VOR unattended-upgrades -->
+<!-- Docker Engine -->
 <rect x="40" y="78" width="600" height="634" rx="12" class="c-blue-fill" stroke-width="0.5"/>
 <text class="th th-blue" x="340" y="100" text-anchor="middle">Docker Engine</text>
 <text class="ts ts-blue" x="340" y="116" text-anchor="middle">docker compose — /home/alex/ugly-stack</text>
@@ -85,86 +86,90 @@
 <line x1="572" y1="250" x2="572" y2="282" stroke="#5F5E5A" stroke-width="0.5" marker-end="url(#a)"/>
 
 <!-- OpenClaw -->
-<rect x="62" y="284" width="90" height="110" rx="8" class="c-teal-fill" stroke-width="0.5"/>
+<rect x="62" y="284" width="90" height="120" rx="8" class="c-teal-fill" stroke-width="0.5"/>
 <text class="th th-teal" x="107" y="304" text-anchor="middle">OpenClaw</text>
 <text class="ts ts-teal" x="107" y="320" text-anchor="middle">:18789</text>
 <text class="ts ts-teal" x="107" y="336" text-anchor="middle">vol: openclaw</text>
 <text class="ts ts-teal" x="107" y="352" text-anchor="middle">OpenRouter</text>
 <text class="ts ts-teal" x="107" y="368" text-anchor="middle">Brevo REST</text>
+<text class="tu" x="107" y="384" text-anchor="middle" fill="#0F6E56">uid 1000:1000 ✓</text>
 
 <!-- nginx www -->
-<rect x="158" y="284" width="90" height="110" rx="8" class="c-gray-fill" stroke-width="0.5"/>
+<rect x="158" y="284" width="90" height="120" rx="8" class="c-gray-fill" stroke-width="0.5"/>
 <text class="th th-gray" x="203" y="304" text-anchor="middle">nginx www</text>
 <text class="ts ts-gray" x="203" y="320" text-anchor="middle">Webserver</text>
 <text class="ts ts-gray" x="203" y="336" text-anchor="middle">vol: ./www</text>
+<text class="tu" x="203" y="384" text-anchor="middle">root</text>
 
 <!-- SearXNG -->
-<rect x="254" y="284" width="90" height="110" rx="8" class="c-purple-fill" stroke-width="0.5"/>
+<rect x="254" y="284" width="90" height="120" rx="8" class="c-purple-fill" stroke-width="0.5"/>
 <text class="th th-purple" x="299" y="304" text-anchor="middle">SearXNG</text>
 <text class="ts ts-purple" x="299" y="320" text-anchor="middle">:8080</text>
 <text class="ts ts-purple" x="299" y="336" text-anchor="middle">vol: searxng</text>
+<text class="tu" x="299" y="384" text-anchor="middle">uid 977</text>
 
 <!-- n8n -->
-<rect x="350" y="284" width="90" height="110" rx="8" class="c-amber-fill" stroke-width="0.5"/>
+<rect x="350" y="284" width="90" height="120" rx="8" class="c-amber-fill" stroke-width="0.5"/>
 <text class="th th-amber" x="395" y="304" text-anchor="middle">n8n</text>
 <text class="ts ts-amber" x="395" y="320" text-anchor="middle">:5678</text>
 <text class="ts ts-amber" x="395" y="336" text-anchor="middle">vol: n8n-data</text>
 <text class="ts ts-amber" x="395" y="352" text-anchor="middle">Zoho IMAP</text>
+<text class="tu" x="395" y="384" text-anchor="middle" fill="#854F0B">uid 1000:1000 ✓</text>
 
 <!-- Roundcube -->
-<rect x="446" y="284" width="90" height="110" rx="8" class="c-coral-fill" stroke-width="0.5"/>
+<rect x="446" y="284" width="90" height="120" rx="8" class="c-coral-fill" stroke-width="0.5"/>
 <text class="th th-coral" x="491" y="304" text-anchor="middle">Roundcube</text>
 <text class="ts ts-coral" x="491" y="320" text-anchor="middle">:80</text>
 <text class="ts ts-coral" x="491" y="336" text-anchor="middle">vol: roundcube</text>
 <text class="ts ts-coral" x="491" y="352" text-anchor="middle">Zoho IMAP</text>
+<text class="tu" x="491" y="384" text-anchor="middle">www-data</text>
 
 <!-- Portainer -->
-<rect x="542" y="284" width="74" height="110" rx="8" class="c-slate-fill" stroke-width="0.5"/>
+<rect x="542" y="284" width="74" height="120" rx="8" class="c-slate-fill" stroke-width="0.5"/>
 <text class="th th-slate" x="579" y="304" text-anchor="middle">Portainer</text>
 <text class="ts ts-slate" x="579" y="320" text-anchor="middle">:9000</text>
 <text class="ts ts-slate" x="579" y="336" text-anchor="middle">vol: portainer</text>
 <text class="ts ts-slate" x="579" y="352" text-anchor="middle">Docker UI</text>
+<text class="tu" x="579" y="384" text-anchor="middle">root</text>
 
 <!-- n8n Hook Pfeil -->
-<line x1="395" y1="394" x2="395" y2="416" stroke="#854F0B" stroke-width="0.8" stroke-dasharray="4 2"/>
-<line x1="107" y1="394" x2="107" y2="416" stroke="#854F0B" stroke-width="0.8" stroke-dasharray="4 2"/>
-<line x1="395" y1="416" x2="112" y2="416" stroke="#854F0B" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#a)"/>
-<rect x="220" y="404" width="180" height="18" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
-<text font-size="11" font-weight="500" fill="#633806" x="310" y="417" text-anchor="middle">HTTP POST /hooks/agent</text>
+<line x1="395" y1="404" x2="395" y2="426" stroke="#854F0B" stroke-width="0.8" stroke-dasharray="4 2"/>
+<line x1="107" y1="404" x2="107" y2="426" stroke="#854F0B" stroke-width="0.8" stroke-dasharray="4 2"/>
+<line x1="395" y1="426" x2="112" y2="426" stroke="#854F0B" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#a)"/>
+<rect x="220" y="414" width="180" height="18" rx="4" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5"/>
+<text font-size="11" font-weight="500" fill="#633806" x="310" y="427" text-anchor="middle">HTTP POST /hooks/agent</text>
 
-<!-- Watchtower — innerhalb Docker Engine -->
-<rect x="62" y="434" width="560" height="48" rx="8" class="c-green-fill" stroke-width="0.5"/>
-<text class="th th-green" x="340" y="454" text-anchor="middle">Watchtower — Auto-Update (02:30 UTC)</text>
-<text class="ts ts-green" x="340" y="470" text-anchor="middle">openclaw · searxng · nginx · roundcube — Docker Socket</text>
+<!-- Watchtower -->
+<rect x="62" y="444" width="560" height="48" rx="8" class="c-green-fill" stroke-width="0.5"/>
+<text class="th th-green" x="340" y="464" text-anchor="middle">Watchtower — Auto-Update (02:30 UTC)</text>
+<text class="ts ts-green" x="340" y="480" text-anchor="middle">openclaw · searxng · nginx · roundcube — Docker Socket</text>
 
-<!-- Externe Anbindungen — innerhalb Docker Engine -->
-<rect x="56" y="494" width="568" height="88" rx="10" class="c-net-fill" stroke-width="1.2" stroke-dasharray="6 3"/>
-<text class="ts ts-gray" x="340" y="510" text-anchor="middle" font-style="italic">Externe Anbindungen</text>
+<!-- Externe Anbindungen -->
+<rect x="56" y="504" width="568" height="88" rx="10" class="c-net-fill" stroke-width="1.2" stroke-dasharray="6 3"/>
+<text class="ts ts-gray" x="340" y="520" text-anchor="middle" font-style="italic">Externe Anbindungen</text>
 
 <!-- OpenRouter -->
-<rect x="60" y="516" width="165" height="56" rx="8" class="c-teal-fill" stroke-width="0.5"/>
-<text class="th th-teal" x="142" y="538" text-anchor="middle">OpenRouter</text>
-<text class="ts ts-teal" x="142" y="554" text-anchor="middle">DeepSeek / Kimi</text>
+<rect x="60" y="526" width="165" height="56" rx="8" class="c-teal-fill" stroke-width="0.5"/>
+<text class="th th-teal" x="142" y="548" text-anchor="middle">OpenRouter</text>
+<text class="ts ts-teal" x="142" y="564" text-anchor="middle">DeepSeek / Kimi</text>
 
 <!-- Brevo -->
-<rect x="240" y="516" width="165" height="56" rx="8" class="c-amber-fill" stroke-width="0.5"/>
-<text class="th th-amber" x="322" y="538" text-anchor="middle">Brevo</text>
-<text class="ts ts-amber" x="322" y="554" text-anchor="middle">SMTP + REST API</text>
+<rect x="240" y="526" width="165" height="56" rx="8" class="c-amber-fill" stroke-width="0.5"/>
+<text class="th th-amber" x="322" y="548" text-anchor="middle">Brevo</text>
+<text class="ts ts-amber" x="322" y="564" text-anchor="middle">SMTP + REST API</text>
 
 <!-- Zoho Mail -->
-<rect x="420" y="516" width="165" height="56" rx="8" class="c-coral-fill" stroke-width="0.5"/>
-<text class="th th-coral" x="502" y="538" text-anchor="middle">Zoho Mail</text>
-<text class="ts ts-coral" x="502" y="554" text-anchor="middle">IMAP / SMTP</text>
+<rect x="420" y="526" width="165" height="56" rx="8" class="c-coral-fill" stroke-width="0.5"/>
+<text class="th th-coral" x="502" y="548" text-anchor="middle">Zoho Mail</text>
+<text class="ts ts-coral" x="502" y="564" text-anchor="middle">IMAP / SMTP</text>
 
 <!-- Verbindungen zu externen Diensten -->
-<line x1="107" y1="482" x2="142" y2="514" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="107" y1="482" x2="322" y2="514" stroke="#BA7517" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="395" y1="482" x2="502" y2="514" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
-<line x1="491" y1="482" x2="502" y2="514" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="107" y1="492" x2="142" y2="524" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="107" y1="492" x2="322" y2="524" stroke="#BA7517" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="395" y1="492" x2="502" y2="524" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<line x1="491" y1="492" x2="502" y2="524" stroke="#993C1D" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 
-<!-- ═══ AB HIER: VPS-EBENE (ausserhalb Docker) ═══ -->
-
-<!-- unattended-upgrades — auf VPS-Ebene, ausserhalb Docker Engine -->
+<!-- unattended-upgrades -->
 <rect x="40" y="726" width="600" height="40" rx="8" class="c-gray-fill" stroke-width="1"/>
 <text class="th th-gray" x="200" y="750" text-anchor="middle">unattended-upgrades</text>
 <text class="ts ts-gray" x="490" y="746" text-anchor="middle">Ubuntu Security + Docker Engine</text>
@@ -195,7 +200,7 @@
 <!-- Telegram -->
 <rect x="230" y="934" width="220" height="40" rx="8" class="c-gray-fill" stroke-width="0.5"/>
 <text class="th th-gray" x="340" y="958" text-anchor="middle">Telegram → OpenClaw</text>
-<path d="M340 934 L340 922 L107 922 L107 482" fill="none" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
+<path d="M340 934 L340 922 L107 922 L107 492" fill="none" stroke="#1D9E75" stroke-width="0.5" stroke-dasharray="3 2" marker-end="url(#a)"/>
 
 <!-- Zeitplan -->
 <rect x="40" y="988" width="600" height="52" rx="8" class="c-gray-fill" stroke-width="0.5"/>

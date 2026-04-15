@@ -29,7 +29,7 @@ Neuestes Backup wird automatisch von Cloudflare R2 wiederhergestellt.
 ## Services
 
 | URL | Service |
-|-----|---------|
+|-----|-------|
 | [claw.beautymolt.com](https://claw.beautymolt.com) | OpenClaw (Ugly) |
 | [search.beautymolt.com](https://search.beautymolt.com) | SearXNG |
 | [n8n.beautymolt.com](https://n8n.beautymolt.com) | n8n |
@@ -59,16 +59,18 @@ nginx :80  (Reverse Proxy)
 watchtower  — kein HTTP, nur Docker Socket
 ```
 
-| Container | Interner Host | Port | Netzwerk |
-|-----------|--------------|------|----------|
-| cloudflared | cloudflared | — | ugly-net |
-| nginx | nginx | 80 | ugly-net |
-| openclaw | openclaw | 18789 | ugly-net |
-| searxng | searxng | 8080 | ugly-net |
-| n8n | n8n | 5678 | ugly-net |
-| roundcube | roundcube | 80 | ugly-net |
-| portainer | portainer | 9000 | ugly-net |
-| watchtower | watchtower | — | ugly-net |
+| Container | Interner Host | Port | User (UID) | Netzwerk |
+|-----------|--------------|------|------------|----------|
+| cloudflared | cloudflared | — | 65532:65532 | ugly-net |
+| nginx | nginx | 80 | root | ugly-net |
+| openclaw | openclaw | 18789 | node (1000:1000) | ugly-net |
+| searxng | searxng | 8080 | 977 | ugly-net |
+| n8n | n8n | 5678 | node (1000:1000) | ugly-net |
+| roundcube | roundcube | 80 | www-data | ugly-net |
+| portainer | portainer | 9000 | root | ugly-net |
+| watchtower | watchtower | — | root | ugly-net |
+
+> **Hinweis:** `user: "1000:1000"` ist explizit gesetzt bei openclaw und n8n. Beide Images laufen als `node` (UID 1000). Die explizite Deklaration verhindert Volume-Ownership-Drift nach Watchtower-Updates.
 
 ## Automatische Updates — Zeitplan (UTC)
 
@@ -138,8 +140,8 @@ Neuen Container hinzufügen: **[backup/NEUES_MODUL.md](./backup/NEUES_MODUL.md)*
 ├── README.md
 ├── BETRIEB.md                ← Betriebshandbuch
 ├── nginx/conf.d/
-├── openclaw-data/            ← Volume
-├── n8n-data/                 ← Volume
+├── openclaw-data/            ← Volume (owner: 1000:1000)
+├── n8n-data/                 ← Volume (owner: 1000:1000)
 ├── searxng-data/             ← Volume
 ├── www/                      ← Volume
 └── backup/
