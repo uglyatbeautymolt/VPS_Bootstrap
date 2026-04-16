@@ -132,9 +132,16 @@ unset ALEX_PW ALEX_PW2
 log "User 'alex' bereit (sudo)"
 
 # SSH: Reverse-DNS-Lookup deaktivieren — verhindert 3-5min Login-Verzögerung
+# Ubuntu 24.04: ssh.service; ältere: sshd.service
 if ! grep -q "^UseDNS no" /etc/ssh/sshd_config; then
   echo "UseDNS no" >> /etc/ssh/sshd_config
-  systemctl reload sshd
+  if systemctl is-active --quiet ssh.service 2>/dev/null; then
+    systemctl reload ssh.service
+  elif systemctl is-active --quiet sshd.service 2>/dev/null; then
+    systemctl reload sshd.service
+  else
+    warn "SSH-Dienst nicht gefunden — UseDNS gesetzt, aber kein reload möglich"
+  fi
   log "SSH UseDNS no gesetzt — Login-Verzögerung durch Reverse-DNS behoben"
 fi
 
