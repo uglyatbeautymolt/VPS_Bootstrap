@@ -66,6 +66,8 @@ if ! command -v bw &>/dev/null; then
 fi
 
 ask "Bitwarden E-Mail:"; read -p "  > " BW_EMAIL
+warn "Hinweis: Bitwarden sendet ein OTP per E-Mail wenn dieses Gerät neu ist."
+warn "         Das OTP wird automatisch als zweiter Faktor abgefragt."
 ask "Bitwarden Master-Passwort:"; read -s -p "  > " BW_PASSWORD; echo ""
 export BW_PASSWORD
 info "Verbinde mit Bitwarden..."
@@ -708,32 +710,33 @@ fi
 # FINAL SUMMARY
 # ─────────────────────────────────────────────────────────────
 banner
-echo "  Stack: $STACK_DIR"
-echo "  User:  alex (sudo, docker)"
-echo "  VPS:   $VPS_IP — $VPS_HOSTER"
-echo "  SSH:   ssh.beautymolt.com → $VPS_IP"
+
+echo -e "  ${GREEN}Stack:${NC}  $STACK_DIR"
+echo -e "  ${GREEN}User:${NC}   alex (sudo, docker)"
+echo -e "  ${GREEN}VPS:${NC}    $VPS_IP — $VPS_HOSTER"
+echo -e "  ${GREEN}SSH:${NC}    ssh://ssh.beautymolt.com"
 echo ""
-echo "  Portainer: https://portainer.beautymolt.com (admin / siehe .env)"
+echo -e "  ${GREEN}Portainer:${NC} https://portainer.beautymolt.com"
 echo ""
-echo "  Zeitplan (UTC):"
-echo "    02:00 — Backup → R2 + .env → GitHub + Mail  [cron]"
-echo "    02:30 — Watchtower Container-Updates         [Watchtower intern]"
-echo "    03:00 — unattended-upgrades + Mail           [systemd Timer + ExecStartPost]"
-echo "    03:30 — Automatischer Reboot (Kernel-Update) [unattended-upgrades]"
+echo "  ── Zeitplan (UTC) ─────────────────────────"
+echo -e "  ${BLUE}02:00${NC}  Backup → R2 + .env → GitHub + Mail"
+echo -e "  ${BLUE}02:30${NC}  Watchtower Container-Updates"
+echo -e "  ${BLUE}03:00${NC}  unattended-upgrades + Mail"
+echo -e "  ${BLUE}03:30${NC}  Automatischer Reboot (bei Kernel-Update)"
 echo ""
-echo "  Services:"
-echo "    claw.beautymolt.com      → OpenClaw"
-echo "    search.beautymolt.com    → SearXNG"
-echo "    n8n.beautymolt.com       → n8n"
-echo "    www.beautymolt.com       → nginx"
-echo "    mail.beautymolt.com      → Roundcube"
-echo "    portainer.beautymolt.com → Portainer"
+echo "  ── Services ───────────────────────────────"
+echo -e "  ${BLUE}claw.beautymolt.com${NC}       OpenClaw"
+echo -e "  ${BLUE}search.beautymolt.com${NC}     SearXNG"
+echo -e "  ${BLUE}n8n.beautymolt.com${NC}        n8n"
+echo -e "  ${BLUE}www.beautymolt.com${NC}        nginx"
+echo -e "  ${BLUE}mail.beautymolt.com${NC}       Roundcube"
+echo -e "  ${BLUE}portainer.beautymolt.com${NC}  Portainer"
 echo ""
 if [ "$BACKUP_RESTORED" = false ]; then
   warn "Kein Backup wiederhergestellt — Telegram Onboarding nötig:"
-  echo "  docker exec -it openclaw node /app/dist/index.js onboard"
+  echo "    docker exec -it openclaw node /app/dist/index.js onboard"
   echo ""
 fi
-echo "  HINWEIS: Neu einloggen damit docker-Gruppe aktiv wird:"
-echo "  su - alex"
+echo -e "  ${YELLOW}HINWEIS:${NC} Neu einloggen damit docker-Gruppe aktiv wird:"
+echo    "    su - alex"
 echo ""
