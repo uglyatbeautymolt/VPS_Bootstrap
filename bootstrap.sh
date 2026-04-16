@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260416_3
+# Version: V.20260416_4
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260416_3"
+BOOTSTRAP_VERSION="V.20260416_4"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
@@ -542,14 +542,14 @@ info "Schritt 7/7 — Cron + Firewall..."
 (crontab -u alex -l 2>/dev/null; \
   echo "0 2 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
   | crontab -u alex -
-log "Backup-Cron eingerichtet (täglich 02:00)"
+log "Backup-Cron eingerichtet (täglich 02:00 UTC)"
 
-# Cron verifizieren
-CRON_CHECK=$(crontab -u alex -l 2>/dev/null | grep backup-master.sh || echo "")
-if [ -z "$CRON_CHECK" ]; then
-  fail "Cron-Eintrag konnte nicht gesetzt werden — cron Daemon prüfen"
+# Cron sofort verifizieren — bricht ab wenn nicht gesetzt
+CRON_BACKUP=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
+if [ -z "$CRON_BACKUP" ]; then
+  fail "Backup-Cron konnte nicht gesetzt werden — cron Daemon prüfen"
 fi
-log "Cron-Eintrag verifiziert: $CRON_CHECK"
+log "Backup-Cron verifiziert"
 
 ufw default deny incoming
 ufw default allow outgoing
@@ -558,7 +558,7 @@ ufw --force enable
 log "Firewall konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
-# ABSCHLUSS-KONTROLLE — IP / HOSTER / CRON
+# ABSCHLUSS-KONTROLLE — alle Zeitpläne prüfen
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -566,14 +566,14 @@ echo "║ Abschluss-Kontrolle                      ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# ── IP + Hoster via ipinfo.io ──────────────────────────────────────────
+# ── VPS-IP + Hoster ───────────────────────────────────────────────────
 info "VPS-IP und Hoster ermitteln..."
 IPINFO=$(curl -s --max-time 5 "https://ipinfo.io/json" 2>/dev/null || echo "{}")
-VPS_IP=$(echo "$IPINFO"     | jq -r '.ip       // "unbekannt"')
-VPS_HOSTER=$(echo "$IPINFO" | jq -r '.org      // "unbekannt"')
+VPS_IP=$(echo "$IPINFO"      | jq -r '.ip       // "unbekannt"')
+VPS_HOSTER=$(echo "$IPINFO"  | jq -r '.org      // "unbekannt"')
 VPS_HOSTNAME=$(echo "$IPINFO"| jq -r '.hostname // "unbekannt"')
-VPS_CITY=$(echo "$IPINFO"   | jq -r '.city     // ""')
-VPS_COUNTRY=$(echo "$IPINFO"| jq -r '.country  // ""')
+VPS_CITY=$(echo "$IPINFO"    | jq -r '.city     // ""')
+VPS_COUNTRY=$(echo "$IPINFO" | jq -r '.country  // ""')
 
 echo -e "  ${GREEN}[✓]${NC} VPS-IP:      $VPS_IP"
 echo -e "  ${GREEN}[✓]${NC} Hoster:      $VPS_HOSTER"
@@ -581,25 +581,82 @@ echo -e "  ${GREEN}[✓]${NC} Hostname:    $VPS_HOSTNAME"
 echo -e "  ${GREEN}[✓]${NC} Standort:    $VPS_CITY, $VPS_COUNTRY"
 echo ""
 
-# ── cron-Daemon Status ─────────────────────────────────────────────────
-CRON_ACTIVE=$(systemctl is-active cron 2>/dev/null || echo "unknown")
-if [ "$CRON_ACTIVE" = "active" ]; then
-  echo -e "  ${GREEN}[✓]${NC} cron-Daemon: active"
-else
-  echo -e "  ${RED}[✗]${NC} cron-Daemon: ${CRON_ACTIVE} — Problem!"
-fi
+# ── Zeitplan-Kontrolle ────────────────────────────────────────────────
+echo "  Zeitpläne (UTC):"
+echo ""
 
-# ── Crontab-Eintrag ────────────────────────────────────────────────────
-FINAL_CRON=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
-if [ -n "$FINAL_CRON" ]; then
-  echo -e "  ${GREEN}[✓]${NC} Backup-Cron installiert:"
-  echo    "        $FINAL_CRON"
+# 02:00 — Backup via Cron
+SCHED_BACKUP_OK=false
+CRON_DAEMON=$(systemctl is-active cron 2>/dev/null || echo "unknown")
+CRON_ENTRY=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
+if [ "$CRON_DAEMON" = "active" ] && [ -n "$CRON_ENTRY" ]; then
+  echo -e "  ${GREEN}[✓]${NC} 02:00  Backup + .env sync + Mail     [cron]"
+  echo    "         $CRON_ENTRY"
+  SCHED_BACKUP_OK=true
 else
-  echo -e "  ${RED}[✗]${NC} Backup-Cron FEHLT — manuell setzen:"
-  echo    "        crontab -u alex -e"
-  echo    "        0 2 * * * bash $STACK_DIR/backup/backup-master.sh >> $STACK_DIR/backup/backup.log 2>&1"
+  echo -e "  ${RED}[✗]${NC} 02:00  Backup + .env sync + Mail     [cron] — PROBLEM"
+  [ "$CRON_DAEMON" != "active" ] && echo    "         cron-Daemon: $CRON_DAEMON"
+  [ -z "$CRON_ENTRY" ]           && echo    "         Cron-Eintrag fehlt"
 fi
+echo ""
 
+# 02:30 — Watchtower Container-Updates (interner Schedule im Container)
+SCHED_WATCHTOWER_OK=false
+WATCHTOWER_RUNNING=$(docker inspect -f '{{.State.Running}}' watchtower 2>/dev/null || echo "false")
+WATCHTOWER_SCHEDULE=$(docker inspect watchtower 2>/dev/null \
+  | jq -r '.[0].Config.Env[] | select(startswith("WATCHTOWER_SCHEDULE="))' \
+  | cut -d= -f2 || echo "")
+if [ "$WATCHTOWER_RUNNING" = "true" ] && [ -n "$WATCHTOWER_SCHEDULE" ]; then
+  echo -e "  ${GREEN}[✓]${NC} 02:30  Watchtower Container-Updates   [Watchtower intern]"
+  echo    "         Schedule: $WATCHTOWER_SCHEDULE"
+  SCHED_WATCHTOWER_OK=true
+else
+  echo -e "  ${RED}[✗]${NC} 02:30  Watchtower Container-Updates   [Watchtower intern] — PROBLEM"
+  [ "$WATCHTOWER_RUNNING" != "true" ] && echo "         Watchtower-Container läuft nicht"
+  [ -z "$WATCHTOWER_SCHEDULE" ]       && echo "         WATCHTOWER_SCHEDULE nicht gesetzt"
+fi
+echo ""
+
+# 03:00 — unattended-upgrades via systemd Timer
+SCHED_UPGRADES_OK=false
+TIMER_ACTIVE=$(systemctl is-active apt-daily-upgrade.timer 2>/dev/null || echo "unknown")
+TIMER_NEXT=$(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value 2>/dev/null \
+  | python3 -c "
+import sys, datetime
+val = sys.stdin.read().strip()
+try:
+  ts = int(val) / 1e6
+  print(datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M UTC'))
+except:
+  print('unbekannt')
+" 2>/dev/null || echo "unbekannt")
+UA_SERVICE=$(systemctl is-active unattended-upgrades 2>/dev/null || echo "unknown")
+if [ "$TIMER_ACTIVE" = "active" ] && [ "$UA_SERVICE" = "active" ]; then
+  echo -e "  ${GREEN}[✓]${NC} 03:00  unattended-upgrades            [systemd Timer]"
+  echo    "         Timer: $TIMER_ACTIVE | Nächster Lauf: $TIMER_NEXT"
+  SCHED_UPGRADES_OK=true
+else
+  echo -e "  ${RED}[✗]${NC} 03:00  unattended-upgrades            [systemd Timer] — PROBLEM"
+  [ "$TIMER_ACTIVE" != "active" ]  && echo "         apt-daily-upgrade.timer: $TIMER_ACTIVE"
+  [ "$UA_SERVICE"   != "active" ]  && echo "         unattended-upgrades.service: $UA_SERVICE"
+fi
+echo ""
+
+# 03:30 — Automatischer Reboot via unattended-upgrades Konfig
+SCHED_REBOOT_OK=false
+REBOOT_TIME=$(grep "Automatic-Reboot-Time" /etc/apt/apt.conf.d/51ugly-upgrades 2>/dev/null \
+  | grep -o '"[^"]*"' | tr -d '"' || echo "")
+REBOOT_ENABLED=$(grep "Automatic-Reboot " /etc/apt/apt.conf.d/51ugly-upgrades 2>/dev/null \
+  | grep -o '"true"' || echo "")
+if [ "$REBOOT_ENABLED" = '"true"' ] && [ -n "$REBOOT_TIME" ]; then
+  echo -e "  ${GREEN}[✓]${NC} 03:30  Automatischer Reboot           [unattended-upgrades]"
+  echo    "         Reboot-Time: $REBOOT_TIME (nur bei Kernel-Update)"
+  SCHED_REBOOT_OK=true
+else
+  echo -e "  ${RED}[✗]${NC} 03:30  Automatischer Reboot           [unattended-upgrades] — PROBLEM"
+  [ "$REBOOT_ENABLED" != '"true"' ] && echo "         Automatic-Reboot nicht auf true"
+  [ -z "$REBOOT_TIME" ]             && echo "         Automatic-Reboot-Time nicht gefunden"
+fi
 echo ""
 
 # ─────────────────────────────────────────────────────────────
@@ -611,22 +668,38 @@ if [ -n "$BREVO_KEY" ]; then
   info "Installations-Mail senden..."
 
   if [ "$BACKUP_RESTORED" = true ]; then
-    RESTORE_STATUS="Ja — wiederhergestellt aus: $LATEST"
+    RESTORE_LINE="Ja — $LATEST"
   else
-    RESTORE_STATUS="Nein — frischer Start (Telegram Onboarding nötig)"
+    RESTORE_LINE="Nein — frischer Start (Telegram Onboarding nötig)"
   fi
 
-  if [ -n "$FINAL_CRON" ]; then
-    CRON_STATUS="OK — $FINAL_CRON"
+  # Zeitplan-Zeilen für Mail
+  if $SCHED_BACKUP_OK; then
+    LINE_BACKUP="[OK] 02:00  Backup + .env sync + Mail     [cron]\n         $CRON_ENTRY"
   else
-    CRON_STATUS="FEHLT — manuell einrichten!"
+    LINE_BACKUP="[!!] 02:00  Backup + .env sync + Mail     [cron] — PROBLEM"
+  fi
+  if $SCHED_WATCHTOWER_OK; then
+    LINE_WATCHTOWER="[OK] 02:30  Watchtower Container-Updates   [Watchtower intern]\n         Schedule: $WATCHTOWER_SCHEDULE"
+  else
+    LINE_WATCHTOWER="[!!] 02:30  Watchtower Container-Updates   [Watchtower intern] — PROBLEM"
+  fi
+  if $SCHED_UPGRADES_OK; then
+    LINE_UPGRADES="[OK] 03:00  unattended-upgrades            [systemd Timer]\n         Nächster Lauf: $TIMER_NEXT"
+  else
+    LINE_UPGRADES="[!!] 03:00  unattended-upgrades            [systemd Timer] — PROBLEM"
+  fi
+  if $SCHED_REBOOT_OK; then
+    LINE_REBOOT="[OK] 03:30  Automatischer Reboot           [unattended-upgrades]\n         Reboot-Time: $REBOOT_TIME"
+  else
+    LINE_REBOOT="[!!] 03:30  Automatischer Reboot           [unattended-upgrades] — PROBLEM"
   fi
 
   CONTAINER_STATUS=$(docker compose -f "$STACK_DIR/docker-compose.yml" ps \
     --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || echo "Nicht verfügbar")
 
   MAIL_BODY="Ugly Stack — Installation abgeschlossen
-$(date '+%Y-%m-%d %H:%M:%S')
+$(date '+%Y-%m-%d %H:%M:%S UTC')
 ========================================
 
 VPS
@@ -639,10 +712,18 @@ Bootstrap
   Version:   $BOOTSTRAP_VERSION
 
 Backup wiederhergestellt:
-  $RESTORE_STATUS
+  $RESTORE_LINE
 
-Backup-Cron:
-  $CRON_STATUS
+----------------------------------------
+Zeitpläne (UTC):
+
+  $(echo -e "$LINE_BACKUP")
+
+  $(echo -e "$LINE_WATCHTOWER")
+
+  $(echo -e "$LINE_UPGRADES")
+
+  $(echo -e "$LINE_REBOOT")
 
 ----------------------------------------
 Container-Status:
@@ -696,10 +777,10 @@ echo ""
 echo "  Portainer: https://portainer.beautymolt.com (admin / siehe .env)"
 echo ""
 echo "  Zeitplan (UTC):"
-echo "    02:00 — Backup → R2 + .env → GitHub + Status-Mail"
-echo "    02:30 — Watchtower → Container-Updates"
-echo "    03:00 — unattended-upgrades → System + Docker Engine"
-echo "    03:30 — Automatischer Neustart (falls Kernel-Update)"
+echo "    02:00 — Backup → R2 + .env → GitHub + Mail  [cron]"
+echo "    02:30 — Watchtower Container-Updates         [Watchtower intern]"
+echo "    03:00 — unattended-upgrades                  [systemd Timer]"
+echo "    03:30 — Automatischer Reboot (Kernel-Update) [unattended-upgrades]"
 echo ""
 echo "  Services:"
 echo "    claw.beautymolt.com      → OpenClaw"
