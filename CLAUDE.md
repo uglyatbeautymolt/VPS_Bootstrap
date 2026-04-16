@@ -5,15 +5,30 @@ Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
 
 ## ⚠️ BEKANNTE BOOTSTRAP-BUGS (bereits gefixt — nie nochmals einbauen)
 
-### cron nicht installiert auf Ubuntu 24.04 (April 2026)
-**Problem:** Ubuntu 24.04 minimal enthält `cron` nicht vorinstalliert. `crontab -u alex` läuft ohne Fehler durch, setzt aber keinen Cron — der Daemon fehlt. Folge: Backup-Cron wird nie ausgeführt, keine Status-Mails.
-**Fix:** `cron` explizit in `apt-get install` aufnehmen + `systemctl enable cron && systemctl start cron` in Schritt 3 von bootstrap.sh.
-**Prüfen auf VPS:** `crontab -l` als alex — muss `0 2 * * * bash ...backup-master.sh` zeigen. `systemctl is-active cron` muss `active` zeigen.
+### cron nicht installiert auf Ubuntu 24.04
+**Problem:** Ubuntu 24.04 minimal enthält `cron` nicht vorinstalliert.
+**Fix:** `cron` explizit in `apt-get install` + `systemctl enable cron && systemctl start cron` in Schritt 3.
+
+### crontab -u Pipe funktioniert nicht auf frischem System
+**Problem:** `(crontab -u alex -l 2>/dev/null; echo "...") | crontab -u alex -` schlägt still fehl wenn alex noch keinen User-Spool hat (`/var/spool/cron/crontabs/alex` existiert nicht). Der Eintrag wird nicht gesetzt.
+**Fix:** Backup-Cron via `/etc/cron.d/ugly-backup` setzen — kein User-Spool nötig, root schreibt direkt:
+```
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+0 2 * * * alex bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1
+```
+Anforderungen: Datei muss `root:root` gehören, `chmod 644`, Dateiname ohne Punkte.
+Docker-Gruppen-Mitgliedschaft von alex funktioniert in cron.d korrekt (cron liest `/etc/group` direkt).
+**Prüfen:** `cat /etc/cron.d/ugly-backup` und `systemctl is-active cron` → `active`.
+
+### Cron-Verifikation darf nie mit fail() beenden
+**Problem:** `[ -z "$CRON_BACKUP" ] && fail "..."` bricht den ganzen Bootstrap ab — Mail, DNS, Firewall laufen nie.
+**Fix:** `warn` statt `fail` bei Cron-Verifikation. Bootstrap läuft immer durch.
 
 ### Weitere bekannte Bugs (bereits gelöst)
 - openclaw-data und n8n-data müssen immer 1000:1000 gehören
 - n8n Import erst nach health-check auf localhost:5678/healthz
-- docker-Gruppe für alex erst nach neu einloggen aktiv
+- docker-Gruppe für alex erst nach neu einloggen aktiv (aber in cron.d kein Problem)
 - openclaw Onboarding ist abgeschlossen — nie nochmals durchführen
 - Portainer Admin-Init: POST /api/users/admin/init — Bereitschaft prüfen via /api/system/status (nicht /api/status — deprecated)
 - n8n Workflow aktivieren: `n8n update:workflow --all --active=true` (nicht `workflow activate` — existiert nicht)
@@ -22,7 +37,7 @@ Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
 
 ## Philosophie — VPS-Portabilität
 
-Das Ziel ist maximale Unabhängigkeit vom Hoster. Der Stack muss auf jedem frischen Ubuntu 24.04 VPS — egal ob Hostinger, Hetzner oder ein anderer Anbieter — mit einem einzigen Befehl vollständig wiederherstellbar sein. Die einzigen drei Eingaben beim Bootstrap sind Bitwarden E-Mail, Master-Passwort und ein Passwort für User `alex`. Alles andere — Secrets, Konfiguration, Daten — kommt automatisch aus `.env.gpg` (GitHub) und dem neuesten Backup (Cloudflare R2).
+Das Ziel ist maximale Unabhängigkeit vom Hoster. Der Stack muss auf jedem frischen Ubuntu 24.04 VPS — egal ob Hostinger, Hetzner oder ein anderer Anbieter — mit einem einzigen Befehl vollständig wiederherstellbar sein. Die einzigen drei Eingaben beim Bootstrap sind Bitwarden E-Mail, Master-Passwort (+ OTP per Mail bei neuem Gerät) und ein Passwort für User `alex`. Alles andere — Secrets, Konfiguration, Daten — kommt automatisch aus `.env.gpg` (GitHub) und dem neuesten Backup (Cloudflare R2).
 
 **Was hosterunabhängig ist:**
 - Alle Secrets → `.env.gpg` im GitHub Repo (verschlüsselt)
@@ -103,7 +118,7 @@ Wechseln nur via CLI — Dashboard-Dropdown hat Bug.
 
 ## Backup
 
-Täglich 02:00 UTC via Cron → backup-master.sh
+Täglich 02:00 UTC via `/etc/cron.d/ugly-backup` → backup-master.sh (läuft als User `alex`)
 - Checksummen-basiert: nur bei Änderungen wird R2-Backup erstellt
 - .env: bei Änderung GPG verschlüsseln → .env.gpg → GitHub push
 - Sonntags: WEEKLY-Backup unabhängig von Änderungen (4 Wochen Rotation)
@@ -115,12 +130,12 @@ Checksummen: `backup/.checksums` (in .gitignore)
 
 ## Automatische Updates — Zeitplan (UTC)
 
-| Zeit | Was |
-|------|-----|
-| 02:00 | Backup + .env sync + Status-Mail |
-| 02:30 | Watchtower — Container-Images (openclaw, searxng, nginx, roundcube) |
-| 03:00 | unattended-upgrades — Ubuntu Security + Docker Engine |
-| 03:30 | Automatischer Neustart falls Kernel-Update nötig |
+| Zeit | Was | Mechanismus |
+|------|-----|-------------|
+| 02:00 | Backup + .env sync + Status-Mail | `/etc/cron.d/ugly-backup` |
+| 02:30 | Watchtower — Container-Images | Watchtower intern (WATCHTOWER_SCHEDULE) |
+| 03:00 | unattended-upgrades — Ubuntu Security + Docker Engine | systemd Timer |
+| 03:30 | Automatischer Neustart falls Kernel-Update nötig | unattended-upgrades |
 
 ## Portainer
 
@@ -134,11 +149,16 @@ Checksummen: `backup/.checksums` (in .gitignore)
 
 ## Bootstrap
 
-Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP falls neues Gerät), Passwort für alex.
+Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP per Mail bei neuem Gerät), Passwort für alex.
 Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 60min,
-unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00.
+unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00 via `/etc/cron.d/`.
 Volume-Ownership wird vollständig automatisch gesetzt — kein manueller Eingriff nötig.
 Bricht ab wenn `PORTAINER_ADMIN_PASSWORD` nicht in `.env` vorhanden — kein Fallback.
+
+## Versionsbezeichnung bootstrap.sh
+
+Format: `V.YYYYMMDD_HHMMSS` — wird dynamisch beim Start gesetzt via `TZ=Europe/Zurich date`.
+Erscheint im Start-Banner, Abschluss-Banner und in der Installations-Mail.
 
 ## ⚠️ VERSAGEN: Obsidian + CouchDB + openclaw (April 2026)
 
