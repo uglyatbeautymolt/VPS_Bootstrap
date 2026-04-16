@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260415_6
+# Version: V.20260416_1
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260415_6"
+BOOTSTRAP_VERSION="V.20260416_1"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
@@ -156,7 +156,13 @@ apt-get install -y -qq \
   ca-certificates gnupg \
   lsb-release apt-transport-https \
   software-properties-common rclone \
-  unattended-upgrades update-notifier-common
+  unattended-upgrades update-notifier-common \
+  cron
+
+# cron-Daemon sicherstellen — auf Ubuntu 24.04 minimal nicht vorinstalliert
+systemctl enable cron
+systemctl start cron
+log "cron installiert und aktiviert"
 
 if command -v docker &>/dev/null; then
   warn "Docker bereits installiert"
@@ -540,6 +546,13 @@ info "Schritt 7/7 — Cron + Firewall..."
   echo "0 2 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
   | crontab -u alex -
 log "Backup-Cron eingerichtet (täglich 02:00)"
+
+# Cron verifizieren
+CRON_CHECK=$(crontab -u alex -l 2>/dev/null | grep backup-master.sh || echo "")
+if [ -z "$CRON_CHECK" ]; then
+  fail "Cron-Eintrag konnte nicht gesetzt werden — cron Daemon prüfen"
+fi
+log "Cron-Eintrag verifiziert: $CRON_CHECK"
 
 ufw default deny incoming
 ufw default allow outgoing

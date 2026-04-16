@@ -3,6 +3,23 @@
 VPS: beautymolt.com (Hetzner CX22, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
 
+## ⚠️ BEKANNTE BOOTSTRAP-BUGS (bereits gefixt — nie nochmals einbauen)
+
+### cron nicht installiert auf Ubuntu 24.04 (April 2026)
+**Problem:** Ubuntu 24.04 minimal enthält `cron` nicht vorinstalliert. `crontab -u alex` läuft ohne Fehler durch, setzt aber keinen Cron — der Daemon fehlt. Folge: Backup-Cron wird nie ausgeführt, keine Status-Mails.
+**Fix:** `cron` explizit in `apt-get install` aufnehmen + `systemctl enable cron && systemctl start cron` in Schritt 3 von bootstrap.sh.
+**Prüfen auf VPS:** `crontab -l` als alex — muss `0 2 * * * bash ...backup-master.sh` zeigen. `systemctl is-active cron` muss `active` zeigen.
+
+### Weitere bekannte Bugs (bereits gelöst)
+- openclaw-data und n8n-data müssen immer 1000:1000 gehören
+- n8n Import erst nach health-check auf localhost:5678/healthz
+- docker-Gruppe für alex erst nach neu einloggen aktiv
+- openclaw Onboarding ist abgeschlossen — nie nochmals durchführen
+- Portainer Admin-Init: POST /api/users/admin/init — Bereitschaft prüfen via /api/system/status (nicht /api/status — deprecated)
+- n8n Workflow aktivieren: `n8n update:workflow --all --active=true` (nicht `workflow activate` — existiert nicht)
+
+---
+
 ## Philosophie — VPS-Portabilität
 
 Das Ziel ist maximale Unabhängigkeit vom Hoster. Der Stack muss auf jedem frischen Ubuntu 24.04 VPS — egal ob Hostinger, Hetzner oder ein anderer Anbieter — mit einem einzigen Befehl vollständig wiederherstellbar sein. Die einzigen drei Eingaben beim Bootstrap sind Bitwarden E-Mail, Master-Passwort und ein Passwort für User `alex`. Alles andere — Secrets, Konfiguration, Daten — kommt automatisch aus `.env.gpg` (GitHub) und dem neuesten Backup (Cloudflare R2).
@@ -122,8 +139,6 @@ Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 
 unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00.
 Volume-Ownership wird vollständig automatisch gesetzt — kein manueller Eingriff nötig.
 Bricht ab wenn `PORTAINER_ADMIN_PASSWORD` nicht in `.env` vorhanden — kein Fallback.
-- Portainer Admin-Init: POST /api/users/admin/init — Bereitschaft prüfen via /api/system/status (nicht /api/status — deprecated)
-- n8n Workflow aktivieren: `n8n update:workflow --all --active=true` (nicht `workflow activate` — existiert nicht)
 
 ## ⚠️ VERSAGEN: Obsidian + CouchDB + openclaw (April 2026)
 
