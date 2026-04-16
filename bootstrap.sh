@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260416_5
+# Version: V.20260416_6
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -14,7 +14,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
-BOOTSTRAP_VERSION="V.20260416_5"
+BOOTSTRAP_VERSION="V.20260416_6"
 
 fix_volume_ownership() {
   local dir="$1"
@@ -156,12 +156,10 @@ RandomizedDelaySec=0
 TIMER
 
 # ── Mail-Script für unattended-upgrades ───────────────────────────────
-# Temporär via curl — nach Clone aus Repo überschrieben (Schritt 4)
 curl -fsSL "https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/scripts/ugly-upgrades-mail.sh" \
   -o /usr/local/bin/ugly-upgrades-mail.sh
 chmod +x /usr/local/bin/ugly-upgrades-mail.sh
 
-# systemd Drop-in: nach jedem apt-daily-upgrade.service Lauf Mail senden
 mkdir -p /etc/systemd/system/apt-daily-upgrade.service.d
 cat > /etc/systemd/system/apt-daily-upgrade.service.d/ugly-mail.conf << 'DROPIN'
 [Service]
@@ -204,7 +202,6 @@ chmod +x "$STACK_DIR/backup/restore/restore-master.sh"
 chmod +x "$STACK_DIR/backup/restore/modules/"*.sh
 [ -d "$STACK_DIR/scripts" ] && chmod +x "$STACK_DIR/scripts/"*.sh
 
-# Mail-Script aus Repo überschreiben (endgültige Version mit korrektem STACK_DIR)
 cp "$STACK_DIR/scripts/ugly-upgrades-mail.sh" /usr/local/bin/ugly-upgrades-mail.sh
 chmod +x /usr/local/bin/ugly-upgrades-mail.sh
 log "Scripts ausführbar + ugly-upgrades-mail.sh aus Repo installiert"
@@ -443,7 +440,7 @@ ufw --force enable
 log "Firewall konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
-# ABSCHLUSS-KONTROLLE — alle Zeitpläne prüfen
+# ABSCHLUSS-KONTROLLE — IP, DNS, Zeitpläne
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -451,6 +448,7 @@ echo "║ Abschluss-Kontrolle                      ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
+# ── VPS-IP + Hoster ───────────────────────────────────────────────────
 info "VPS-IP und Hoster ermitteln..."
 IPINFO=$(curl -s --max-time 5 "https://ipinfo.io/json" 2>/dev/null || echo "{}")
 VPS_IP=$(echo "$IPINFO"      | jq -r '.ip       // "unbekannt"')
@@ -464,6 +462,65 @@ echo -e "  ${GREEN}[✓]${NC} Hoster:      $VPS_HOSTER"
 echo -e "  ${GREEN}[✓]${NC} Hostname:    $VPS_HOSTNAME"
 echo -e "  ${GREEN}[✓]${NC} Standort:    $VPS_CITY, $VPS_COUNTRY"
 echo ""
+
+# ── Cloudflare DNS — ssh.beautymolt.com auf neue IP setzen ───────────
+source "$STACK_DIR/.env"
+DNS_STATUS="nicht konfiguriert (CF_TOKEN oder CF_ZONE_ID fehlen)"
+
+if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE_ID" ] && [ "$VPS_IP" != "unbekannt" ]; then
+  info "Cloudflare DNS — ssh.beautymolt.com → $VPS_IP ..."
+
+  # Bestehenden A-Record für 'ssh' suchen
+  EXISTING=$(curl -s -X GET \
+    "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?type=A&name=ssh.beautymolt.com" \
+    -H "Authorization: Bearer ${CF_TOKEN}" \
+    -H "Content-Type: application/json")
+
+  RECORD_ID=$(echo "$EXISTING" | jq -r '.result[0].id // ""')
+  RECORD_IP=$(echo "$EXISTING" | jq -r '.result[0].content // ""')
+
+  if [ -n "$RECORD_ID" ]; then
+    # Record existiert — updaten falls IP anders
+    if [ "$RECORD_IP" = "$VPS_IP" ]; then
+      log "DNS ssh.beautymolt.com bereits auf $VPS_IP — kein Update nötig"
+      DNS_STATUS="bereits korrekt ($VPS_IP)"
+    else
+      UPDATE=$(curl -s -X PUT \
+        "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records/${RECORD_ID}" \
+        -H "Authorization: Bearer ${CF_TOKEN}" \
+        -H "Content-Type: application/json" \
+        --data "{\"type\":\"A\",\"name\":\"ssh\",\"content\":\"${VPS_IP}\",\"ttl\":60,\"proxied\":false}")
+      if echo "$UPDATE" | jq -e '.success' | grep -q true; then
+        log "DNS ssh.beautymolt.com: $RECORD_IP → $VPS_IP (aktualisiert)"
+        DNS_STATUS="aktualisiert: $RECORD_IP → $VPS_IP"
+      else
+        warn "DNS Update fehlgeschlagen: $(echo "$UPDATE" | jq -r '.errors[0].message // "unbekannt"')"
+        DNS_STATUS="Update FEHLGESCHLAGEN — manuell setzen"
+      fi
+    fi
+  else
+    # Record existiert nicht — neu erstellen
+    CREATE=$(curl -s -X POST \
+      "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
+      -H "Authorization: Bearer ${CF_TOKEN}" \
+      -H "Content-Type: application/json" \
+      --data "{\"type\":\"A\",\"name\":\"ssh\",\"content\":\"${VPS_IP}\",\"ttl\":60,\"proxied\":false}")
+    if echo "$CREATE" | jq -e '.success' | grep -q true; then
+      log "DNS ssh.beautymolt.com: neu erstellt → $VPS_IP (Proxy: off)"
+      DNS_STATUS="neu erstellt → $VPS_IP"
+    else
+      warn "DNS Erstellen fehlgeschlagen: $(echo "$CREATE" | jq -r '.errors[0].message // "unbekannt"')"
+      DNS_STATUS="Erstellen FEHLGESCHLAGEN — manuell setzen"
+    fi
+  fi
+
+  echo -e "  ${GREEN}[✓]${NC} ssh.beautymolt.com → $VPS_IP  [Cloudflare DNS, Proxy: off]"
+else
+  echo -e "  ${YELLOW}[!]${NC} DNS-Update übersprungen — CF_TOKEN oder CF_ZONE_ID fehlen in .env"
+fi
+echo ""
+
+# ── Zeitplan-Kontrolle ────────────────────────────────────────────────
 echo "  Zeitpläne (UTC):"
 echo ""
 
@@ -552,8 +609,6 @@ echo ""
 # ─────────────────────────────────────────────────────────────
 # INSTALLATIONS-MAIL VIA BREVO
 # ─────────────────────────────────────────────────────────────
-source "$STACK_DIR/.env"
-
 if [ -n "$BREVO_KEY" ]; then
   info "Installations-Mail senden..."
 
@@ -593,6 +648,9 @@ VPS
   Hostname:  $VPS_HOSTNAME
   Standort:  $VPS_CITY, $VPS_COUNTRY
 
+DNS
+  ssh.beautymolt.com: $DNS_STATUS
+
 Bootstrap
   Version:   $BOOTSTRAP_VERSION
 
@@ -616,6 +674,7 @@ $CONTAINER_STATUS
 
 ----------------------------------------
 Services:
+  ssh://ssh.beautymolt.com:22
   https://claw.beautymolt.com
   https://search.beautymolt.com
   https://n8n.beautymolt.com
@@ -651,6 +710,7 @@ echo ""
 echo "  Stack: $STACK_DIR"
 echo "  User:  alex (sudo, docker)"
 echo "  VPS:   $VPS_IP — $VPS_HOSTER"
+echo "  SSH:   ssh.beautymolt.com → $VPS_IP"
 echo ""
 echo "  Portainer: https://portainer.beautymolt.com (admin / siehe .env)"
 echo ""
