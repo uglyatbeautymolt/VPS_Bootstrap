@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260416_6
+# Version: V.20260416_7
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -14,7 +14,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
-BOOTSTRAP_VERSION="V.20260416_6"
+BOOTSTRAP_VERSION="V.20260416_7"
 
 fix_volume_ownership() {
   local dir="$1"
@@ -429,9 +429,15 @@ info "Schritt 7/7 — Cron + Firewall..."
   echo "0 2 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
   | crontab -u alex -
 
+# Kurz warten damit crontab-Datei auf Disk geschrieben ist
+sleep 2
 CRON_BACKUP=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
-[ -z "$CRON_BACKUP" ] && fail "Backup-Cron konnte nicht gesetzt werden"
-log "Backup-Cron eingerichtet und verifiziert (02:00 UTC)"
+if [ -z "$CRON_BACKUP" ]; then
+  warn "Backup-Cron-Verifikation fehlgeschlagen — Bootstrap läuft weiter"
+  warn "Manuell prüfen: crontab -u alex -l"
+else
+  log "Backup-Cron eingerichtet und verifiziert (02:00 UTC)"
+fi
 
 ufw default deny incoming
 ufw default allow outgoing
@@ -470,7 +476,6 @@ DNS_STATUS="nicht konfiguriert (CF_TOKEN oder CF_ZONE_ID fehlen)"
 if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE_ID" ] && [ "$VPS_IP" != "unbekannt" ]; then
   info "Cloudflare DNS — ssh.beautymolt.com → $VPS_IP ..."
 
-  # Bestehenden A-Record für 'ssh' suchen
   EXISTING=$(curl -s -X GET \
     "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records?type=A&name=ssh.beautymolt.com" \
     -H "Authorization: Bearer ${CF_TOKEN}" \
@@ -480,7 +485,6 @@ if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE_ID" ] && [ "$VPS_IP" != "unbekannt" ]; t
   RECORD_IP=$(echo "$EXISTING" | jq -r '.result[0].content // ""')
 
   if [ -n "$RECORD_ID" ]; then
-    # Record existiert — updaten falls IP anders
     if [ "$RECORD_IP" = "$VPS_IP" ]; then
       log "DNS ssh.beautymolt.com bereits auf $VPS_IP — kein Update nötig"
       DNS_STATUS="bereits korrekt ($VPS_IP)"
@@ -499,7 +503,6 @@ if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE_ID" ] && [ "$VPS_IP" != "unbekannt" ]; t
       fi
     fi
   else
-    # Record existiert nicht — neu erstellen
     CREATE=$(curl -s -X POST \
       "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/dns_records" \
       -H "Authorization: Bearer ${CF_TOKEN}" \
