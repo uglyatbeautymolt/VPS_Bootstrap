@@ -2,7 +2,6 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260416_7
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -14,7 +13,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
-BOOTSTRAP_VERSION="V.20260416_7"
+BOOTSTRAP_VERSION="V.$(date '+%Y%m%d_%H%M%S')"
 
 fix_volume_ownership() {
   local dir="$1"
@@ -27,7 +26,7 @@ echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║ Ugly Stack — Bootstrap                   ║"
 echo "║ beautymolt.com                           ║"
-echo "║ ${BOOTSTRAP_VERSION}                     ║"
+echo "║ ${BOOTSTRAP_VERSION}              ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
@@ -707,7 +706,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════╗"
 echo "║ Installation abgeschlossen!              ║"
-echo "║ ${BOOTSTRAP_VERSION}                     ║"
+echo "║ ${BOOTSTRAP_VERSION}              ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 echo "  Stack: $STACK_DIR"
