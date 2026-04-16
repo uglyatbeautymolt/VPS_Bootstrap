@@ -22,6 +22,28 @@ fix_volume_ownership() {
   chmod -R g+rX "$dir"
 }
 
+# apt-get update mit Retry — bei Mirror-Fehler Prompt anzeigen
+apt_update() {
+  local max_retries=3
+  local attempt=1
+  while true; do
+    if apt-get update -qq 2>/tmp/apt_update_err; then
+      return 0
+    fi
+    if [ $attempt -ge $max_retries ]; then
+      cat /tmp/apt_update_err
+      fail "apt-get update nach $max_retries Versuchen fehlgeschlagen — Abbruch"
+    fi
+    warn "apt-get update fehlgeschlagen — Mirror möglicherweise out-of-sync."
+    warn "  Fehler: $(tail -1 /tmp/apt_update_err)"
+    echo ""
+    echo -e "  ${YELLOW}Retry $attempt/$((max_retries-1)) in 30s...${NC} (Enter für sofortigen Retry, Ctrl+C zum Abbrechen)"
+    read -t 30 -p "  > " _ || true
+    attempt=$((attempt + 1))
+    info "Retry $attempt — apt-get update..."
+  done
+}
+
 banner() {
   local line1="Ugly Stack — Bootstrap"
   local line2="beautymolt.com"
@@ -52,7 +74,7 @@ REPO_URL="https://github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 info "Schritt 1/7 — Bitwarden Login..."
 echo ""
 
-apt-get update -qq
+apt_update
 apt-get install -y -qq curl unzip jq gpg git
 
 if ! command -v bw &>/dev/null; then
@@ -89,7 +111,7 @@ unset BW_SESSION BW_EMAIL
 log "GPG Passwort + GitHub Token geholt — Bitwarden gesperrt"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 2 — USER ALEX ANLEGEN
+# SCHRITT 2 — USER ALEX ANLEGEN + SSH OPTIMIEREN
 # ─────────────────────────────────────────────────────────────
 info "Schritt 2/7 — User 'alex' anlegen..."
 
@@ -109,12 +131,19 @@ echo "alex:$ALEX_PW" | chpasswd
 unset ALEX_PW ALEX_PW2
 log "User 'alex' bereit (sudo)"
 
+# SSH: Reverse-DNS-Lookup deaktivieren — verhindert 3-5min Login-Verzögerung
+if ! grep -q "^UseDNS no" /etc/ssh/sshd_config; then
+  echo "UseDNS no" >> /etc/ssh/sshd_config
+  systemctl reload sshd
+  log "SSH UseDNS no gesetzt — Login-Verzögerung durch Reverse-DNS behoben"
+fi
+
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 3 — SYSTEM + TOOLS + DOCKER + UNATTENDED-UPGRADES
 # ─────────────────────────────────────────────────────────────
 info "Schritt 3/7 — System + Docker + Auto-Updates installieren..."
 
-apt-get update -qq
+apt_update
 apt-get upgrade -y -qq
 apt-get install -y -qq \
   curl git unzip jq gpg ca-certificates gnupg \
@@ -438,8 +467,6 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
-# Backup-Cron via /etc/cron.d/ setzen — zuverlässiger als crontab -u Pipe
-# da kein User-Spool nötig und sofort aktiv ohne Login
 cat > /etc/cron.d/ugly-backup << 'CRONFILE'
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
