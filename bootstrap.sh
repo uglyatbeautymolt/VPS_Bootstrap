@@ -13,7 +13,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
 
-BOOTSTRAP_VERSION="V.$(date '+%Y%m%d_%H%M%S')"
+BOOTSTRAP_VERSION="V.$(TZ=Europe/Zurich date '+%Y%m%d_%H%M%S')"
 
 fix_volume_ownership() {
   local dir="$1"
@@ -22,13 +22,24 @@ fix_volume_ownership() {
   chmod -R g+rX "$dir"
 }
 
-echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║ Ugly Stack — Bootstrap                   ║"
-echo "║ beautymolt.com                           ║"
-echo "║ ${BOOTSTRAP_VERSION}              ║"
-echo "╚══════════════════════════════════════════╝"
-echo ""
+banner() {
+  local line1="Ugly Stack — Bootstrap"
+  local line2="beautymolt.com"
+  local line3="$BOOTSTRAP_VERSION"
+  local width=0
+  for s in "$line1" "$line2" "$line3"; do
+    [ ${#s} -gt $width ] && width=${#s}
+  done
+  local bar; bar=$(printf '%*s' $((width + 2)) '' | tr ' ' '─')
+  echo ""
+  echo "╔${bar}╗"
+  printf "║ %-*s ║\n" "$width" "$line1"
+  printf "║ %-*s ║\n" "$width" "$line2"
+  printf "║ %-*s ║\n" "$width" "$line3"
+  echo "╚${bar}╝"
+  echo ""
+}
+banner
 
 [ "$EUID" -ne 0 ] && fail "Bitte als root ausführen"
 
@@ -428,7 +439,6 @@ info "Schritt 7/7 — Cron + Firewall..."
   echo "0 2 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
   | crontab -u alex -
 
-# Kurz warten damit crontab-Datei auf Disk geschrieben ist
 sleep 2
 CRON_BACKUP=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
 if [ -z "$CRON_BACKUP" ]; then
@@ -453,7 +463,6 @@ echo "║ Abschluss-Kontrolle                      ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# ── VPS-IP + Hoster ───────────────────────────────────────────────────
 info "VPS-IP und Hoster ermitteln..."
 IPINFO=$(curl -s --max-time 5 "https://ipinfo.io/json" 2>/dev/null || echo "{}")
 VPS_IP=$(echo "$IPINFO"      | jq -r '.ip       // "unbekannt"')
@@ -468,7 +477,6 @@ echo -e "  ${GREEN}[✓]${NC} Hostname:    $VPS_HOSTNAME"
 echo -e "  ${GREEN}[✓]${NC} Standort:    $VPS_CITY, $VPS_COUNTRY"
 echo ""
 
-# ── Cloudflare DNS — ssh.beautymolt.com auf neue IP setzen ───────────
 source "$STACK_DIR/.env"
 DNS_STATUS="nicht konfiguriert (CF_TOKEN oder CF_ZONE_ID fehlen)"
 
@@ -522,11 +530,9 @@ else
 fi
 echo ""
 
-# ── Zeitplan-Kontrolle ────────────────────────────────────────────────
 echo "  Zeitpläne (UTC):"
 echo ""
 
-# 02:00 — Backup [cron]
 SCHED_BACKUP_OK=false
 CRON_DAEMON=$(systemctl is-active cron 2>/dev/null || echo "unknown")
 CRON_ENTRY=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
@@ -541,7 +547,6 @@ else
 fi
 echo ""
 
-# 02:30 — Watchtower [intern]
 SCHED_WATCHTOWER_OK=false
 WATCHTOWER_RUNNING=$(docker inspect -f '{{.State.Running}}' watchtower 2>/dev/null || echo "false")
 WATCHTOWER_SCHEDULE=$(docker inspect watchtower 2>/dev/null \
@@ -558,7 +563,6 @@ else
 fi
 echo ""
 
-# 03:00 — unattended-upgrades [systemd Timer] + Mail-Hook
 SCHED_UPGRADES_OK=false
 TIMER_ACTIVE=$(systemctl is-active apt-daily-upgrade.timer 2>/dev/null || echo "unknown")
 TIMER_NEXT=$(systemctl show apt-daily-upgrade.timer -p NextElapseUSecRealtime --value 2>/dev/null \
@@ -591,7 +595,6 @@ else
 fi
 echo ""
 
-# 03:30 — Automatischer Reboot [unattended-upgrades]
 SCHED_REBOOT_OK=false
 REBOOT_TIME=$(grep "Automatic-Reboot-Time" /etc/apt/apt.conf.d/51ugly-upgrades 2>/dev/null \
   | grep -o '"[^"]*"' | tr -d '"' || echo "")
@@ -641,7 +644,7 @@ if [ -n "$BREVO_KEY" ]; then
     --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || echo "Nicht verfügbar")
 
   MAIL_BODY="Ugly Stack — Installation abgeschlossen
-$(date '+%Y-%m-%d %H:%M:%S UTC')
+$(TZ=Europe/Zurich date '+%Y-%m-%d %H:%M:%S %Z')
 ========================================
 
 VPS
@@ -704,11 +707,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # FINAL SUMMARY
 # ─────────────────────────────────────────────────────────────
-echo "╔══════════════════════════════════════════╗"
-echo "║ Installation abgeschlossen!              ║"
-echo "║ ${BOOTSTRAP_VERSION}              ║"
-echo "╚══════════════════════════════════════════╝"
-echo ""
+banner
 echo "  Stack: $STACK_DIR"
 echo "  User:  alex (sudo, docker)"
 echo "  VPS:   $VPS_IP — $VPS_HOSTER"
