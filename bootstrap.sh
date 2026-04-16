@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260416_2
+# Version: V.20260416_3
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260416_2"
+BOOTSTRAP_VERSION="V.20260416_3"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
@@ -462,8 +462,6 @@ fix_volume_ownership "$STACK_DIR/n8n-data"
 log "openclaw-data + n8n-data Ownership gesetzt (1000:alex, g+rX)"
 
 # ── Portainer Admin via API einrichten ─────────────────────────────────
-# jq wird verwendet damit Sonderzeichen im Passwort (z.B. $) korrekt
-# escaped werden und nicht von der Shell expandiert werden.
 source "$STACK_DIR/.env"
 
 [ -z "$PORTAINER_ADMIN_PASSWORD" ] \
@@ -484,7 +482,6 @@ if [ -n "$PORTAINER_IP" ]; then
     sleep 5
   done
 
-  # jq baut JSON sicher — Sonderzeichen wie $ werden korrekt escaped
   PORTAINER_JSON=$(jq -n \
     --arg user "admin" \
     --arg pass "$PORTAINER_ADMIN_PASSWORD" \
@@ -561,7 +558,7 @@ ufw --force enable
 log "Firewall konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
-# ABSCHLUSS-KONTROLLE
+# ABSCHLUSS-KONTROLLE — IP / HOSTER / CRON
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -569,7 +566,22 @@ echo "║ Abschluss-Kontrolle                      ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
 
-# cron-Daemon Status
+# ── IP + Hoster via ipinfo.io ──────────────────────────────────────────
+info "VPS-IP und Hoster ermitteln..."
+IPINFO=$(curl -s --max-time 5 "https://ipinfo.io/json" 2>/dev/null || echo "{}")
+VPS_IP=$(echo "$IPINFO"     | jq -r '.ip       // "unbekannt"')
+VPS_HOSTER=$(echo "$IPINFO" | jq -r '.org      // "unbekannt"')
+VPS_HOSTNAME=$(echo "$IPINFO"| jq -r '.hostname // "unbekannt"')
+VPS_CITY=$(echo "$IPINFO"   | jq -r '.city     // ""')
+VPS_COUNTRY=$(echo "$IPINFO"| jq -r '.country  // ""')
+
+echo -e "  ${GREEN}[✓]${NC} VPS-IP:      $VPS_IP"
+echo -e "  ${GREEN}[✓]${NC} Hoster:      $VPS_HOSTER"
+echo -e "  ${GREEN}[✓]${NC} Hostname:    $VPS_HOSTNAME"
+echo -e "  ${GREEN}[✓]${NC} Standort:    $VPS_CITY, $VPS_COUNTRY"
+echo ""
+
+# ── cron-Daemon Status ─────────────────────────────────────────────────
 CRON_ACTIVE=$(systemctl is-active cron 2>/dev/null || echo "unknown")
 if [ "$CRON_ACTIVE" = "active" ]; then
   echo -e "  ${GREEN}[✓]${NC} cron-Daemon: active"
@@ -577,7 +589,7 @@ else
   echo -e "  ${RED}[✗]${NC} cron-Daemon: ${CRON_ACTIVE} — Problem!"
 fi
 
-# Crontab-Eintrag für Backup
+# ── Crontab-Eintrag ────────────────────────────────────────────────────
 FINAL_CRON=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
 if [ -n "$FINAL_CRON" ]; then
   echo -e "  ${GREEN}[✓]${NC} Backup-Cron installiert:"
@@ -590,6 +602,88 @@ fi
 
 echo ""
 
+# ─────────────────────────────────────────────────────────────
+# INSTALLATIONS-MAIL VIA BREVO
+# ─────────────────────────────────────────────────────────────
+source "$STACK_DIR/.env"
+
+if [ -n "$BREVO_KEY" ]; then
+  info "Installations-Mail senden..."
+
+  if [ "$BACKUP_RESTORED" = true ]; then
+    RESTORE_STATUS="Ja — wiederhergestellt aus: $LATEST"
+  else
+    RESTORE_STATUS="Nein — frischer Start (Telegram Onboarding nötig)"
+  fi
+
+  if [ -n "$FINAL_CRON" ]; then
+    CRON_STATUS="OK — $FINAL_CRON"
+  else
+    CRON_STATUS="FEHLT — manuell einrichten!"
+  fi
+
+  CONTAINER_STATUS=$(docker compose -f "$STACK_DIR/docker-compose.yml" ps \
+    --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || echo "Nicht verfügbar")
+
+  MAIL_BODY="Ugly Stack — Installation abgeschlossen
+$(date '+%Y-%m-%d %H:%M:%S')
+========================================
+
+VPS
+  IP:        $VPS_IP
+  Hoster:    $VPS_HOSTER
+  Hostname:  $VPS_HOSTNAME
+  Standort:  $VPS_CITY, $VPS_COUNTRY
+
+Bootstrap
+  Version:   $BOOTSTRAP_VERSION
+
+Backup wiederhergestellt:
+  $RESTORE_STATUS
+
+Backup-Cron:
+  $CRON_STATUS
+
+----------------------------------------
+Container-Status:
+$CONTAINER_STATUS
+
+----------------------------------------
+Services:
+  https://claw.beautymolt.com
+  https://search.beautymolt.com
+  https://n8n.beautymolt.com
+  https://www.beautymolt.com
+  https://portainer.beautymolt.com"
+
+  MAIL_PAYLOAD=$(jq -n \
+    --arg subject "Ugly Stack installiert — $VPS_IP ($VPS_HOSTER)" \
+    --arg body "$MAIL_BODY" \
+    '{
+      sender: {name: "Ugly Bootstrap", email: "ugly@beautymolt.com"},
+      to: [{email: "alex@alexstuder.ch"}],
+      subject: $subject,
+      textContent: $body
+    }')
+
+  HTTP_CODE=$(curl -s -o /tmp/brevo_install_response.txt -w "%{http_code}" \
+    -X POST "https://api.brevo.com/v3/smtp/email" \
+    -H "api-key: ${BREVO_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "$MAIL_PAYLOAD")
+
+  if [ "$HTTP_CODE" = "201" ]; then
+    log "Installations-Mail gesendet → alex@alexstuder.ch"
+  else
+    warn "Mail fehlgeschlagen (HTTP $HTTP_CODE): $(cat /tmp/brevo_install_response.txt)"
+  fi
+else
+  warn "BREVO_KEY nicht in .env — keine Installations-Mail"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# FINAL SUMMARY
+# ─────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════╗"
 echo "║ Installation abgeschlossen!              ║"
 echo "║ ${BOOTSTRAP_VERSION}                     ║"
@@ -597,6 +691,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Stack: $STACK_DIR"
 echo "  User:  alex (sudo, docker)"
+echo "  VPS:   $VPS_IP — $VPS_HOSTER"
 echo ""
 echo "  Portainer: https://portainer.beautymolt.com (admin / siehe .env)"
 echo ""
