@@ -2,7 +2,7 @@
 set -e
 # ─────────────────────────────────────────────────────────────
 # Ugly Stack — Bootstrap Script
-# Version: V.20260416_1
+# Version: V.20260416_2
 # Frischer Ubuntu 24.04 VPS — als root ausführen
 # curl -fsSL https://raw.githubusercontent.com/uglyatbeautymolt/VPS_Bootstrap/main/bootstrap.sh -o bootstrap.sh
 # chmod +x bootstrap.sh && ./bootstrap.sh
@@ -29,7 +29,7 @@ bw_spinner() {
   echo ""
 }
 
-BOOTSTRAP_VERSION="V.20260416_1"
+BOOTSTRAP_VERSION="V.20260416_2"
 
 # ─────────────────────────────────────────────────────────────
 # HILFSFUNKTION: Volume-Ownership setzen
@@ -560,7 +560,36 @@ ufw allow ssh
 ufw --force enable
 log "Firewall konfiguriert"
 
+# ─────────────────────────────────────────────────────────────
+# ABSCHLUSS-KONTROLLE
+# ─────────────────────────────────────────────────────────────
 echo ""
+echo "╔══════════════════════════════════════════╗"
+echo "║ Abschluss-Kontrolle                      ║"
+echo "╚══════════════════════════════════════════╝"
+echo ""
+
+# cron-Daemon Status
+CRON_ACTIVE=$(systemctl is-active cron 2>/dev/null || echo "unknown")
+if [ "$CRON_ACTIVE" = "active" ]; then
+  echo -e "  ${GREEN}[✓]${NC} cron-Daemon: active"
+else
+  echo -e "  ${RED}[✗]${NC} cron-Daemon: ${CRON_ACTIVE} — Problem!"
+fi
+
+# Crontab-Eintrag für Backup
+FINAL_CRON=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
+if [ -n "$FINAL_CRON" ]; then
+  echo -e "  ${GREEN}[✓]${NC} Backup-Cron installiert:"
+  echo    "        $FINAL_CRON"
+else
+  echo -e "  ${RED}[✗]${NC} Backup-Cron FEHLT — manuell setzen:"
+  echo    "        crontab -u alex -e"
+  echo    "        0 2 * * * bash $STACK_DIR/backup/backup-master.sh >> $STACK_DIR/backup/backup.log 2>&1"
+fi
+
+echo ""
+
 echo "╔══════════════════════════════════════════╗"
 echo "║ Installation abgeschlossen!              ║"
 echo "║ ${BOOTSTRAP_VERSION}                     ║"
