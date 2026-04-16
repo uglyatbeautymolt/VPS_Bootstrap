@@ -75,7 +75,7 @@ info "Schritt 1/7 — Bitwarden Login..."
 echo ""
 
 apt_update
-apt-get install -y -qq curl unzip jq gpg git
+apt-get install -y -qq curl unzip jq gpg git sqlite3
 
 if ! command -v bw &>/dev/null; then
   info "Bitwarden CLI installieren..."
@@ -155,7 +155,7 @@ apt-get upgrade -y -qq
 apt-get install -y -qq \
   curl git unzip jq gpg ca-certificates gnupg \
   lsb-release apt-transport-https software-properties-common \
-  rclone unattended-upgrades update-notifier-common cron
+  rclone unattended-upgrades update-notifier-common cron sqlite3
 
 systemctl enable cron && systemctl start cron
 log "cron installiert und aktiviert"
@@ -445,20 +445,97 @@ else
   warn "Portainer IP nicht gefunden"
 fi
 
+# ── n8n Workflows importieren + via REST API aktivieren ──────────────
 if [ -f "$STACK_DIR/n8n-data/workflows-backup.json" ]; then
   info "n8n Workflows importieren..."
+
+  # Auf healthz warten
   for i in $(seq 1 24); do
     docker exec n8n wget -q --spider http://localhost:5678/healthz 2>/dev/null && log "n8n bereit" && break
     warn "n8n noch nicht bereit ($i/24)"; sleep 5
   done
+
+  # Import via CLI
   docker cp "$STACK_DIR/n8n-data/workflows-backup.json"   n8n:/tmp/workflows-backup.json
   docker cp "$STACK_DIR/n8n-data/credentials-backup.json" n8n:/tmp/credentials-backup.json
   docker exec n8n n8n import:workflow    --input=/tmp/workflows-backup.json
   docker exec n8n n8n import:credentials --input=/tmp/credentials-backup.json
   rm -f "$STACK_DIR/n8n-data/workflows-backup.json" "$STACK_DIR/n8n-data/credentials-backup.json"
-  docker exec n8n n8n update:workflow --all --active=true 2>/dev/null || \
-    warn "n8n Workflow-Aktivierung — bitte manuell in UI aktivieren"
-  log "n8n Workflows importiert und aktiviert"
+  log "n8n Workflows und Credentials importiert"
+
+  # ── API Key direkt in SQLite eintragen ──
+  # CLI-Aktivierung registriert Webhooks nicht korrekt — REST API ist zwingend.
+  # API Keys können nicht per Env-Var gesetzt werden → direkt in DB schreiben.
+  N8N_DB="$STACK_DIR/n8n-data/database.sqlite"
+  N8N_API_KEY="$(openssl rand -hex 32)"
+  N8N_KEY_ID="$(cat /proc/sys/kernel/random/uuid)"
+  N8N_USER_ID=$(sqlite3 "$N8N_DB" "SELECT id FROM user LIMIT 1;")
+
+  if [ -n "$N8N_USER_ID" ]; then
+    sqlite3 "$N8N_DB" "
+      INSERT OR REPLACE INTO user_api_keys (id, userId, label, apiKey, scopes, audience)
+      VALUES (
+        '${N8N_KEY_ID}',
+        '${N8N_USER_ID}',
+        'bootstrap',
+        '${N8N_API_KEY}',
+        NULL,
+        'public-api'
+      );
+    "
+    log "n8n API Key in DB eingetragen (userId: ${N8N_USER_ID})"
+  else
+    warn "n8n User nicht gefunden — Workflow-Aktivierung via REST API übersprungen"
+    N8N_API_KEY=""
+  fi
+
+  # n8n neu starten damit der API Key geladen wird
+  if [ -n "$N8N_API_KEY" ]; then
+    info "n8n neu starten (API Key laden)..."
+    docker restart n8n
+    for i in $(seq 1 24); do
+      docker exec n8n wget -q --spider http://localhost:5678/healthz 2>/dev/null && log "n8n wieder bereit" && break
+      warn "n8n startet ($i/24)"; sleep 5
+    done
+
+    # n8n Container-IP ermitteln (Aufruf von ausserhalb des ugly-net Netzwerks)
+    N8N_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' n8n 2>/dev/null || echo "")
+
+    if [ -n "$N8N_IP" ]; then
+      info "n8n Workflows via REST API aktivieren..."
+      # Alle Workflow-IDs holen
+      WF_IDS=$(curl -s \
+        -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+        "http://${N8N_IP}:5678/api/v1/workflows?limit=250" \
+        | jq -r '.data[].id' 2>/dev/null || echo "")
+
+      if [ -n "$WF_IDS" ]; then
+        ACTIVATED=0
+        FAILED=0
+        for WF_ID in $WF_IDS; do
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST \
+            -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+            "http://${N8N_IP}:5678/api/v1/workflows/${WF_ID}/activate")
+          if [ "$HTTP_CODE" = "200" ]; then
+            ACTIVATED=$((ACTIVATED + 1))
+          else
+            FAILED=$((FAILED + 1))
+            warn "Workflow ${WF_ID}: Aktivierung fehlgeschlagen (HTTP ${HTTP_CODE})"
+          fi
+        done
+        log "n8n Workflows aktiviert: ${ACTIVATED} OK, ${FAILED} fehlgeschlagen"
+      else
+        warn "Keine Workflow-IDs gefunden — REST API Antwort prüfen"
+      fi
+    else
+      warn "n8n Container-IP nicht ermittelbar — Workflows manuell aktivieren"
+    fi
+
+    # Temporären Bootstrap-API-Key wieder löschen
+    sqlite3 "$N8N_DB" "DELETE FROM user_api_keys WHERE label = 'bootstrap';"
+    log "Bootstrap API Key aus DB entfernt"
+  fi
 fi
 
 if [ -f "$STACK_DIR/searxng-data/settings.yml" ]; then
