@@ -278,8 +278,9 @@ sudo -u alex git -C "$STACK_DIR" remote set-url origin \
   "https://${GITHUB_TOKEN}@github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 sudo -u alex git -C "$STACK_DIR" config user.name "Ugly"
 sudo -u alex git -C "$STACK_DIR" config user.email "ugly@beautymolt.com"
+sudo -u alex git -C "$STACK_DIR" config core.fileMode false
 unset GITHUB_TOKEN
-log "Git Remote konfiguriert"
+log "Git Remote konfiguriert (fileMode false — chmod ignoriert)"
 log "Repository geclont und konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
