@@ -437,18 +437,15 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 7/7 — Cron + Firewall..."
 
-(crontab -u alex -l 2>/dev/null; \
-  echo "0 2 * * * bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1") \
-  | crontab -u alex -
-
-sleep 2
-CRON_BACKUP=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
-if [ -z "$CRON_BACKUP" ]; then
-  warn "Backup-Cron-Verifikation fehlgeschlagen — Bootstrap läuft weiter"
-  warn "Manuell prüfen: crontab -u alex -l"
-else
-  log "Backup-Cron eingerichtet und verifiziert (02:00 UTC)"
-fi
+# Backup-Cron via /etc/cron.d/ setzen — zuverlässiger als crontab -u Pipe
+# da kein User-Spool nötig und sofort aktiv ohne Login
+cat > /etc/cron.d/ugly-backup << 'CRONFILE'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+0 2 * * * alex bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1
+CRONFILE
+chmod 644 /etc/cron.d/ugly-backup
+log "Backup-Cron eingerichtet (/etc/cron.d/ugly-backup, 02:00 UTC, User: alex)"
 
 ufw default deny incoming
 ufw default allow outgoing
@@ -537,15 +534,14 @@ echo ""
 
 SCHED_BACKUP_OK=false
 CRON_DAEMON=$(systemctl is-active cron 2>/dev/null || echo "unknown")
-CRON_ENTRY=$(crontab -u alex -l 2>/dev/null | grep "backup-master.sh" || echo "")
+CRON_ENTRY=$(grep "backup-master.sh" /etc/cron.d/ugly-backup 2>/dev/null || echo "")
 if [ "$CRON_DAEMON" = "active" ] && [ -n "$CRON_ENTRY" ]; then
   echo -e "  ${GREEN}[✓]${NC} 02:00  Backup + .env sync + Mail     [cron]"
-  echo    "         $CRON_ENTRY"
   SCHED_BACKUP_OK=true
 else
   echo -e "  ${RED}[✗]${NC} 02:00  Backup + .env sync + Mail     [cron] — PROBLEM"
   [ "$CRON_DAEMON" != "active" ] && echo "         cron-Daemon: $CRON_DAEMON"
-  [ -z "$CRON_ENTRY" ]           && echo "         Cron-Eintrag fehlt"
+  [ -z "$CRON_ENTRY" ]           && echo "         /etc/cron.d/ugly-backup fehlt"
 fi
 echo ""
 
@@ -624,7 +620,7 @@ if [ -n "$BREVO_KEY" ]; then
     || RESTORE_LINE="Nein — frischer Start (Telegram Onboarding nötig)"
 
   $SCHED_BACKUP_OK \
-    && LINE_BACKUP="[OK] 02:00  Backup + .env sync + Mail     [cron]\n         $CRON_ENTRY" \
+    && LINE_BACKUP="[OK] 02:00  Backup + .env sync + Mail     [cron]" \
     || LINE_BACKUP="[!!] 02:00  Backup + .env sync + Mail     [cron] — PROBLEM"
 
   $SCHED_WATCHTOWER_OK \
