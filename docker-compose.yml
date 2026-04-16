@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./www:/var/www/html:ro
+      - ./www:/var/www/html:rw
     networks:
       - ugly-net
 
@@ -42,6 +42,7 @@ services:
       - TZ=${TZ}
     volumes:
       - ./openclaw-data:/home/node/.openclaw
+      - ./www:/home/node/www  # Webadmin: schreibt HTML/CSS hier — nginx serviert aus /var/www/html
     networks:
       - ugly-net
     depends_on:
