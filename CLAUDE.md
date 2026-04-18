@@ -2,6 +2,7 @@
 
 VPS: beautymolt.com (Hetzner CX22, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
+<!-- GitHub MCP access verified 2026-04-18 -->
 
 ## ⚠️ BEKANNTE BOOTSTRAP-BUGS (bereits gefixt — nie nochmals einbauen)
 
