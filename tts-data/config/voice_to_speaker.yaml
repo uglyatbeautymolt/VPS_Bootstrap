@@ -1,0 +1,23 @@
+tts-1:
+  alloy:
+    model: voices/de_DE-thorsten-medium.onnx
+    speaker:
+  echo:
+    model: voices/de_DE-thorsten-medium.onnx
+    speaker:
+  fable:
+    model: voices/de_DE-thorsten-medium.onnx
+    speaker:
+  onyx:
+    model: voices/de_DE-thorsten-medium.onnx
+    speaker:
+  nova:
+    model: voices/de_DE-thorsten-medium.onnx
+    speaker:
+  shimmer:
+    model: voices/de_DE-thorsten-medium.onnx
+    speaker:
+tts-1-hd:
+  alloy:
+    model: voices/de_DE-thorsten-medium.onnx
+    speaker:

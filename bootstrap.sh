@@ -315,6 +315,18 @@ endpoint = ${CF_R2_ENDPOINT}
 acl = private
 RCLONE
 
+mkdir -p "$STACK_DIR/tts-data/voices"
+THORSTEN="$STACK_DIR/tts-data/voices/de_DE-thorsten-medium.onnx"
+if [ ! -f "$THORSTEN" ]; then
+  info "Thorsten TTS-Stimme herunterladen (~61MB)..."
+  BASE="https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/de/de_DE/thorsten/medium"
+  curl -fsSL "$BASE/de_DE-thorsten-medium.onnx"      -o "$THORSTEN"
+  curl -fsSL "$BASE/de_DE-thorsten-medium.onnx.json" -o "${THORSTEN}.json"
+  log "Thorsten TTS-Stimme heruntergeladen"
+else
+  log "Thorsten TTS-Stimme bereits vorhanden"
+fi
+
 chown -R alex:alex "$STACK_DIR"
 fix_volume_ownership "$STACK_DIR/openclaw-data"
 fix_volume_ownership "$STACK_DIR/n8n-data"

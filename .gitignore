@@ -9,3 +9,4 @@ backup/www-sync.sh
 backup/.www-checksum
 backup/.checksums
 roundcube-data/
+tts-data/voices/

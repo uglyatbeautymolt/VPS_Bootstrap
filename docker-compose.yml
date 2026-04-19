@@ -124,7 +124,7 @@ services:
       - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${BREVO_SMTP_API_KEY}
     networks:
       - ugly-net
-    command: openclaw searxng nginx roundcube whisper
+    command: openclaw searxng nginx roundcube whisper tts
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -146,6 +146,16 @@ services:
       - WHISPER_LANGUAGE=de
     volumes:
       - whisper-models:/var/lib/whisper
+    networks:
+      - ugly-net
+
+  tts:
+    image: ghcr.io/matatonic/openedai-speech-min:latest
+    container_name: tts
+    restart: unless-stopped
+    volumes:
+      - ./tts-data/config:/app/config
+      - ./tts-data/voices:/app/voices
     networks:
       - ugly-net
 
