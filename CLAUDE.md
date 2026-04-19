@@ -1,55 +1,29 @@
 # Ugly Stack
 
 VPS: beautymolt.com (Hetzner CX22, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
-Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap
-<!-- GitHub MCP access verified 2026-04-18 -->
+Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap | Betriebshandbuch: BETRIEB.md
 
 ## ⚠️ BEKANNTE BOOTSTRAP-BUGS (bereits gefixt — nie nochmals einbauen)
 
-### cron nicht installiert auf Ubuntu 24.04
-**Problem:** Ubuntu 24.04 minimal enthält `cron` nicht vorinstalliert.
-**Fix:** `cron` explizit in `apt-get install` + `systemctl enable cron && systemctl start cron` in Schritt 3.
-
-### crontab -u Pipe funktioniert nicht auf frischem System
-**Problem:** `(crontab -u alex -l 2>/dev/null; echo "...") | crontab -u alex -` schlägt still fehl wenn alex noch keinen User-Spool hat (`/var/spool/cron/crontabs/alex` existiert nicht). Der Eintrag wird nicht gesetzt.
-**Fix:** Backup-Cron via `/etc/cron.d/ugly-backup` setzen — kein User-Spool nötig, root schreibt direkt:
-```
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-0 2 * * * alex bash /home/alex/ugly-stack/backup/backup-master.sh >> /home/alex/ugly-stack/backup/backup.log 2>&1
-```
-Anforderungen: Datei muss `root:root` gehören, `chmod 644`, Dateiname ohne Punkte.
-Docker-Gruppen-Mitgliedschaft von alex funktioniert in cron.d korrekt (cron liest `/etc/group` direkt).
-**Prüfen:** `cat /etc/cron.d/ugly-backup` und `systemctl is-active cron` → `active`.
-
-### Cron-Verifikation darf nie mit fail() beenden
-**Problem:** `[ -z "$CRON_BACKUP" ] && fail "..."` bricht den ganzen Bootstrap ab — Mail, DNS, Firewall laufen nie.
-**Fix:** `warn` statt `fail` bei Cron-Verifikation. Bootstrap läuft immer durch.
-
-### Weitere bekannte Bugs (bereits gelöst)
-- openclaw-data und n8n-data müssen immer 1000:1000 gehören
-- n8n Import erst nach health-check auf localhost:5678/healthz
-- docker-Gruppe für alex erst nach neu einloggen aktiv (aber in cron.d kein Problem)
-- openclaw Onboarding ist abgeschlossen — nie nochmals durchführen
-- Portainer Admin-Init: POST /api/users/admin/init — Bereitschaft prüfen via /api/system/status (nicht /api/status — deprecated)
-- n8n Workflow aktivieren: `n8n update:workflow --all --active=true` (nicht `workflow activate` — existiert nicht)
+- **cron nicht installiert:** `cron` explizit in `apt-get install` + `systemctl enable/start cron`
+- **crontab -u Pipe schlägt fehl** auf frischem System (kein User-Spool) → Backup-Cron immer via `/etc/cron.d/ugly-backup` (`root:root`, `chmod 644`, kein Punkt im Dateinamen)
+- **Cron-Verifikation:** `warn` statt `fail` — Bootstrap muss immer durchlaufen
+- **openclaw-data / n8n-data:** Owner muss `1000:1000` sein
+- **n8n Import:** erst nach health-check auf `localhost:5678/healthz`
+- **Portainer Admin-Init:** Bereitschaft via `/api/system/status` (nicht `/api/status` — deprecated)
+- **n8n Workflow aktivieren:** `n8n update:workflow --all --active=true` (nicht `workflow activate`)
+- **openclaw Onboarding:** bereits abgeschlossen — nie nochmals durchführen
 
 ---
 
 ## Philosophie — VPS-Portabilität
 
-Das Ziel ist maximale Unabhängigkeit vom Hoster. Der Stack muss auf jedem frischen Ubuntu 24.04 VPS — egal ob Hostinger, Hetzner oder ein anderer Anbieter — mit einem einzigen Befehl vollständig wiederherstellbar sein. Die einzigen drei Eingaben beim Bootstrap sind Bitwarden E-Mail, Master-Passwort (+ OTP per Mail bei neuem Gerät) und ein Passwort für User `alex`. Alles andere — Secrets, Konfiguration, Daten — kommt automatisch aus `.env.gpg` (GitHub) und dem neuesten Backup (Cloudflare R2).
+Frischer Ubuntu 24.04 VPS → ein Befehl → kompletter Stack. Inputs: Bitwarden E-Mail, Master-Passwort, Passwort für alex. Alles andere kommt aus `.env.gpg` (GitHub) und dem letzten Backup (Cloudflare R2).
 
-**Was hosterunabhängig ist:**
-- Alle Secrets → `.env.gpg` im GitHub Repo (verschlüsselt)
-- Alle Daten → Cloudflare R2 (Backups, GPG-verschlüsselt)
-- DNS + Tunnel → Cloudflare (hosterunabhängig)
-- Domains → beautymolt.com via Cloudflare
-
-**Was beim Wechsel zu tun ist:**
+**VPS-Wechsel:**
 1. `bash backup/backup-master.sh` auf altem VPS
-2. `bootstrap.sh` auf neuem VPS ausführen
-3. Cloudflare Tunnel-Route auf neuen VPS umstellen
+2. `bootstrap.sh` auf neuem VPS
+3. Cloudflare Tunnel-Route umstellen
 4. Alten VPS abschalten
 
 ## Services
@@ -69,30 +43,32 @@ Docker Bridge-Netzwerk: **ugly-net**
 
 ## Externe Services
 
-| Service | Link | Zweck |
-|---------|------|-------|
-| Cloudflare | dash.cloudflare.com | DNS, Tunnel, R2 Backups, Secrets Store |
-| Bitwarden | vault.bitwarden.com | BACKUP_GPG_PASSWORD, GITHUB_TOKEN |
-| Brevo | app.brevo.com | E-Mail-Versand (SMTP + API) |
-| Zoho Mail | mail.zoho.eu | E-Mail-Empfang (ugly@beautymolt.com) |
+| Service | Zweck |
+|---------|-------|
+| Cloudflare | DNS, Tunnel, R2 Backups |
+| Bitwarden | BACKUP_GPG_PASSWORD, GITHUB_TOKEN |
+| Brevo | E-Mail-Versand (SMTP + API) |
+| Zoho Mail | E-Mail-Empfang (ugly@beautymolt.com) |
 
 ## Secrets
 
 `.env` auf VPS → `.env.gpg` im Repo (GPG). Update: `bash set-secret.sh NAME "wert"`
-`.env.example` wird nie benötigt — nur `.env.gpg` zählt.
 Scripts immer mit `bash scriptname.sh` — nie `./` (Git setzt kein +x).
-sudo-Timeout: 60 Min (einmal Passwort → 1h gültig).
-`PORTAINER_ADMIN_PASSWORD` muss in `.env` vorhanden sein — bootstrap bricht sonst ab.
+sudo-Timeout: 60 Min.
 
 ## E-Mail Workflow
 
-ugly@beautymolt.com (Zoho IMAP) → n8n → HTTP POST http://openclaw:18789/hooks/agent
+ugly@beautymolt.com (Zoho IMAP) → n8n → HTTP POST `http://openclaw:18789/hooks/agent`
 Header: `Authorization: Bearer <OPENCLAW_HOOK_TOKEN>`
 Body: `{"message":"...","name":"Email","wakeMode":"now"}`
 **Handlungsauftrag MUSS im message-Feld VOR dem Mail-Inhalt stehen.**
 
-## openclaw.json — Kritisch
+## ⚠️ openclaw — Konfigurationsregel
 
+**Claude darf openclaw-Konfigurationen (openclaw.json oder andere) NIE direkt bearbeiten.**
+Stattdessen: entweder beschreiben, wie Alex die Änderung manuell vornimmt — oder einen Prompt formulieren, den Alex an openclaw weitergibt, damit openclaw sich selbst konfiguriert. Bevorzugte Reihenfolge: (1) openclaw konfiguriert sich selbst, (2) Alex macht es manuell, (3) Claude beschreibt den Weg.
+
+### Kritische Einstellungen (zur Referenz)
 - `bind: lan` — nie loopback (Dashboard setzt es manchmal zurück)
 - `hooks` ist **Top-Level-Key** — nie unter `gateway` einbetten
 - Hook Auth: `Authorization: Bearer` — nie `x-openclaw-token`
@@ -100,17 +76,15 @@ Body: `{"message":"...","name":"Email","wakeMode":"now"}`
 
 ## Volume-Ownership
 
-- `openclaw-data` und `n8n-data`: Owner `1000:alex` (GID von alex), Permissions `g+rX`
-- `user: "1000:1000"` ist explizit in docker-compose.yml gesetzt → verhindert Ownership-Drift nach Watchtower-Updates
-- bootstrap.sh setzt Ownership automatisch via `fix_volume_ownership()` — nie manuell nötig
-- Bei unerwartetem Permission-Problem: `sudo chown -R 1000:$(id -g) ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data && sudo chmod -R g+rX ~/ugly-stack/openclaw-data ~/ugly-stack/n8n-data`
+- `openclaw-data` und `n8n-data`: Owner `1000:1000`, Permissions `g+rX`
+- `user: "1000:1000"` explizit in `docker-compose.yml` → verhindert Ownership-Drift nach Watchtower-Updates
+- bootstrap.sh setzt Ownership automatisch via `fix_volume_ownership()`
 
 ## Brevo
 
-- `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via **Brevo Skill**
+- `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via Brevo Skill
 - `BREVO_SMTP_API_KEY` (xsmtpsib-...): n8n SMTP + Watchtower SMTP
 - Absender immer: `ugly@beautymolt.com` (Name: Ugly)
-- Backup Status-Mail: `backup-master.sh` → Brevo REST API → alex@alexstuder.ch
 
 ## Modelle
 
@@ -119,59 +93,33 @@ Wechseln nur via CLI — Dashboard-Dropdown hat Bug.
 
 ## Backup
 
-Täglich 02:00 UTC via `/etc/cron.d/ugly-backup` → backup-master.sh (läuft als User `alex`)
-- Checksummen-basiert: nur bei Änderungen wird R2-Backup erstellt
-- .env: bei Änderung GPG verschlüsseln → .env.gpg → GitHub push
-- Sonntags: WEEKLY-Backup unabhängig von Änderungen (4 Wochen Rotation)
-- Normale Backups: 7 Stück behalten
-- Status-Mail nach jedem Lauf via Brevo REST API
-
-Manuell: `bash backup/backup-master.sh`
-Checksummen: `backup/.checksums` (in .gitignore)
+Checksummen-basiert: nur bei Änderungen wird R2-Backup erstellt. `.env` bei Änderung → GPG → GitHub.
+Sonntags: WEEKLY-Backup (4 Wochen Rotation). Normale Backups: 7 Stück.
+Manuell: `bash backup/backup-master.sh` | Checksummen: `backup/.checksums`
 
 ## Automatische Updates — Zeitplan (UTC)
 
 | Zeit | Was | Mechanismus |
 |------|-----|-------------|
 | 02:00 | Backup + .env sync + Status-Mail | `/etc/cron.d/ugly-backup` |
-| 02:30 | Watchtower — Container-Images | Watchtower intern (WATCHTOWER_SCHEDULE) |
-| 03:00 | unattended-upgrades — Ubuntu Security + Docker Engine | systemd Timer |
-| 03:30 | Automatischer Neustart falls Kernel-Update nötig | unattended-upgrades |
+| 02:30 | Watchtower — Container-Images | Watchtower intern |
+| 03:00 | unattended-upgrades | systemd Timer |
+| 03:30 | Automatischer Neustart falls Kernel-Update | unattended-upgrades |
 
 ## Portainer
 
-- URL: https://portainer.beautymolt.com
-- HTTP intern (Port 9000) — nginx Proxy
-- `--trusted-origins portainer.beautymolt.com` als CLI-Flag (OHNE https://) — als command in docker-compose.yml
-- TRUSTED_ORIGINS als Env-Var funktioniert NICHT in 2.39 — nur CLI-Flag verwenden
-- Volume: `ugly-stack_portainer-data` (named volume, Compose-Projektname als Präfix)
-- Passwort-Reset: `docker stop portainer && docker run --rm -v ugly-stack_portainer-data:/data portainer/helper-reset-password --password 'PASSWORT' && docker start portainer` (einfache Anführungszeichen wegen Sonderzeichen)
-- Login: admin / Passwort aus `.env` (`PORTAINER_ADMIN_PASSWORD`)
+- URL: https://portainer.beautymolt.com — HTTP intern (Port 9000), nginx Proxy
+- `--trusted-origins portainer.beautymolt.com` als CLI-Flag (OHNE https://) — TRUSTED_ORIGINS als Env-Var funktioniert NICHT in 2.39
+- Volume: `ugly-stack_portainer-data`
+- Passwort-Reset: `docker stop portainer && docker run --rm -v ugly-stack_portainer-data:/data portainer/helper-reset-password --password 'PASSWORT' && docker start portainer`
+- Login: admin / `PORTAINER_ADMIN_PASSWORD` aus `.env` — bootstrap bricht ab wenn nicht vorhanden
 
 ## Bootstrap
 
-Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP per Mail bei neuem Gerät), Passwort für alex.
-Setzt automatisch: `bind: lan`, `hooks` Block, `chmod +x` alle Scripts, sudoers 60min,
-unattended-upgrades, systemd Timer-Overrides, Backup-Cron 02:00 via `/etc/cron.d/`.
-Volume-Ownership wird vollständig automatisch gesetzt — kein manueller Eingriff nötig.
-Bricht ab wenn `PORTAINER_ADMIN_PASSWORD` nicht in `.env` vorhanden — kein Fallback.
+Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP), Passwort für alex.
+Setzt automatisch: `bind: lan`, hooks-Block, sudoers 60min, unattended-upgrades, Backup-Cron via `/etc/cron.d/`.
+Versionsformat: `V.YYYYMMDD_HHMMSS` (TZ=Europe/Zurich).
 
-## Versionsbezeichnung bootstrap.sh
+## ⚠️ Regel: Architektur zuerst
 
-Format: `V.YYYYMMDD_HHMMSS` — wird dynamisch beim Start gesetzt via `TZ=Europe/Zurich date`.
-Erscheint im Start-Banner, Abschluss-Banner und in der Installations-Mail.
-
-## ⚠️ VERSAGEN: Obsidian + CouchDB + openclaw (April 2026)
-
-**Grundfehler:** Die Architektur wurde nie vollständig durchdacht bevor mit der Implementation begonnen wurde. Das kostete Alex Zeit und Tokens.
-
-- CouchDB speichert Obsidian-Notizen als Binär-Chunks — NICHT als `.md`-Dateien. openclaw kann sie nicht lesen. Das hätte vor dem ersten Commit bekannt sein müssen.
-- Lösungen wurden mehrfach ohne Webrecherche vorgeschlagen und mussten revidiert werden.
-- CORS-Probleme mit Cloudflare Tunnel wurden nicht vorab recherchiert.
-
-**Korrekte Architektur für zukünftige Implementation:**
-1. Obsidian LiveSync + CouchDB → Sync Mac ↔ iPhone
-2. Syncthing → spiegelt Vault als `.md`-Dateien auf den VPS
-3. openclaw mountet Syncthing-Ordner → liest `.md`-Dateien direkt
-
-**Regel:** Architektur vollständig verstehen und dokumentieren, BEVOR eine einzige Zeile Code geschrieben oder committed wird. Jede Lösung zuerst recherchieren.
+Architektur vollständig verstehen und dokumentieren, BEVOR Code geschrieben oder committed wird. Jede Lösung zuerst recherchieren. (Gelernt aus dem Obsidian/CouchDB-Fehlschlag April 2026.)
