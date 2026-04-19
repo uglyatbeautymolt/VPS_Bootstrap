@@ -68,6 +68,7 @@ else
     CF_R2_SECRET_KEY
     CF_R2_BUCKET
     CF_R2_ENDPOINT
+    ANTHROPIC_API_KEY
   )
   for i in "${!SECRETS[@]}"; do
     echo "  $((i+1)). ${SECRETS[$i]}"

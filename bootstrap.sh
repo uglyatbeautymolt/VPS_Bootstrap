@@ -71,7 +71,7 @@ REPO_URL="https://github.com/uglyatbeautymolt/VPS_Bootstrap.git"
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 1 — BITWARDEN LOGIN + SECRETS HOLEN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 1/7 — Bitwarden Login..."
+info "Schritt 1/8 — Bitwarden Login..."
 echo ""
 
 apt_update
@@ -113,7 +113,7 @@ log "GPG Passwort + GitHub Token geholt — Bitwarden gesperrt"
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 2 — USER ALEX ANLEGEN + SSH OPTIMIEREN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 2/7 — User 'alex' anlegen..."
+info "Schritt 2/8 — User 'alex' anlegen..."
 
 if id "alex" &>/dev/null; then warn "User 'alex' existiert bereits"
 else useradd -m -s /bin/bash alex; log "User 'alex' angelegt"; fi
@@ -148,7 +148,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 3 — SYSTEM + TOOLS + DOCKER + UNATTENDED-UPGRADES
 # ─────────────────────────────────────────────────────────────
-info "Schritt 3/7 — System + Docker + Auto-Updates installieren..."
+info "Schritt 3/8 — System + Docker + Auto-Updates installieren..."
 
 apt_update
 apt-get upgrade -y -qq
@@ -169,6 +169,15 @@ fi
 
 usermod -aG docker alex
 log "User 'alex' zur docker-Gruppe hinzugefügt"
+
+if ! command -v node &>/dev/null; then
+  info "Node.js LTS installieren..."
+  curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - >/dev/null 2>&1
+  apt-get install -y -qq nodejs
+  log "Node.js $(node --version) installiert"
+else
+  warn "Node.js bereits installiert ($(node --version))"
+fi
 
 cat > /etc/apt/apt.conf.d/51ugly-upgrades << 'UPGRADES'
 Unattended-Upgrade::Allowed-Origins {
@@ -223,7 +232,7 @@ log "System bereit"
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 4 — REPO CLONEN + .env ENTSCHLÜSSELN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 4/7 — Repository clonen..."
+info "Schritt 4/8 — Repository clonen..."
 
 if [ -d "$STACK_DIR" ]; then
   warn "$STACK_DIR existiert — wird gesichert"
@@ -322,7 +331,7 @@ log "Repository geclont und konfiguriert"
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 5 — BACKUP VON R2 WIEDERHERSTELLEN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 5/7 — Backup von R2 wiederherstellen..."
+info "Schritt 5/8 — Backup von R2 wiederherstellen..."
 BACKUP_RESTORED=false
 
 LATEST=$(rclone ls "r2:${CF_R2_BUCKET}/backups/" \
@@ -411,7 +420,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 6 — STACK STARTEN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 6/7 — Stack starten..."
+info "Schritt 6/8 — Stack starten..."
 cd "$STACK_DIR"
 docker compose pull
 docker compose up -d
@@ -549,7 +558,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # SCHRITT 7 — CRON + FIREWALL
 # ─────────────────────────────────────────────────────────────
-info "Schritt 7/7 — Cron + Firewall..."
+info "Schritt 7/8 — Cron + Firewall..."
 
 cat > /etc/cron.d/ugly-backup << 'CRONFILE'
 SHELL=/bin/bash
@@ -564,6 +573,36 @@ ufw default allow outgoing
 ufw allow ssh
 ufw --force enable
 log "Firewall konfiguriert"
+
+# ─────────────────────────────────────────────────────────────
+# SCHRITT 8 — CLAUDE CODE CLI
+# ─────────────────────────────────────────────────────────────
+info "Schritt 8/8 — Claude Code CLI installieren..."
+
+CLAUDE_INSTALL_OK=false
+if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+  CLAUDE_VERSION=$(claude --version 2>/dev/null | head -1 || echo "unbekannt")
+  log "Claude Code installiert: $CLAUDE_VERSION"
+  CLAUDE_INSTALL_OK=true
+else
+  warn "Claude Code Installation fehlgeschlagen — manuell: npm install -g @anthropic-ai/claude-code"
+fi
+
+if [ -n "$ANTHROPIC_API_KEY" ]; then
+  if grep -q "^ANTHROPIC_API_KEY=" /etc/environment 2>/dev/null; then
+    sed -i "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}|" /etc/environment
+  else
+    echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> /etc/environment
+  fi
+  if grep -q "^export ANTHROPIC_API_KEY=" /home/alex/.bashrc 2>/dev/null; then
+    sed -i "s|^export ANTHROPIC_API_KEY=.*|export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}|" /home/alex/.bashrc
+  else
+    echo "export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> /home/alex/.bashrc
+  fi
+  log "ANTHROPIC_API_KEY in /etc/environment + /home/alex/.bashrc eingetragen"
+else
+  warn "ANTHROPIC_API_KEY fehlt in .env — Key setzen mit: bash set-secret.sh ANTHROPIC_API_KEY 'sk-ant-...'"
+fi
 
 # ─────────────────────────────────────────────────────────────
 # ABSCHLUSS-KONTROLLE — IP, DNS, Zeitpläne
@@ -839,6 +878,16 @@ echo -e "  ${BLUE}n8n.beautymolt.com${NC}        n8n"
 echo -e "  ${BLUE}www.beautymolt.com${NC}        nginx"
 echo -e "  ${BLUE}mail.beautymolt.com${NC}       Roundcube"
 echo -e "  ${BLUE}portainer.beautymolt.com${NC}  Portainer"
+echo ""
+echo "  ── Claude Code ────────────────────────────"
+if $CLAUDE_INSTALL_OK; then
+  echo -e "  ${GREEN}[✓]${NC} claude installiert: $CLAUDE_VERSION"
+  [ -n "$ANTHROPIC_API_KEY" ] \
+    && echo -e "  ${GREEN}[✓]${NC} ANTHROPIC_API_KEY gesetzt" \
+    || echo -e "  ${YELLOW}[!]${NC} ANTHROPIC_API_KEY fehlt — bash set-secret.sh ANTHROPIC_API_KEY 'sk-ant-...'"
+else
+  echo -e "  ${YELLOW}[!]${NC} Claude Code nicht installiert — manuell: npm install -g @anthropic-ai/claude-code"
+fi
 echo ""
 if [ "$BACKUP_RESTORED" = false ]; then
   warn "Kein Backup wiederhergestellt — Telegram Onboarding nötig:"
