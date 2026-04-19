@@ -124,7 +124,7 @@ services:
       - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${BREVO_SMTP_API_KEY}
     networks:
       - ugly-net
-    command: openclaw searxng nginx roundcube
+    command: openclaw searxng nginx roundcube whisper
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -137,8 +137,21 @@ services:
       - ugly-net
     command: --http-enabled --trusted-origins portainer.beautymolt.com
 
+  whisper:
+    image: hwdsl2/whisper-server:latest
+    container_name: whisper
+    restart: unless-stopped
+    environment:
+      - WHISPER_MODEL=small
+      - WHISPER_LANGUAGE=de
+    volumes:
+      - whisper-models:/var/lib/whisper
+    networks:
+      - ugly-net
+
 volumes:
   portainer-data:
+  whisper-models:
 
 networks:
   ugly-net:
