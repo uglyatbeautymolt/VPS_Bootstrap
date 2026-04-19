@@ -62,6 +62,8 @@ Alle Container laufen im internen Bridge-Netzwerk **`ugly-net`**. Nach aussen is
 | roundcube | 80 | www-data | |
 | portainer | 9000 | root | Login: admin / siehe `.env` |
 | watchtower | — | root | Socket-Zugriff nötig |
+| whisper | 9000 | root | STT — faster-whisper small (Deutsch) |
+| tts | 8000 | root | TTS — Piper + Thorsten (Deutsch) |
 
 > `user: "1000:1000"` ist bei openclaw und n8n explizit gesetzt. Das verhindert Volume-Ownership-Drift nach Watchtower-Updates — bootstrap.sh setzt die Ownership vollautomatisch.
 
@@ -126,6 +128,9 @@ bash backup/restore/restore-master.sh
 ├── n8n-data/                 ← Volume (owner: 1000:alex, g+rX)
 ├── searxng-data/             ← Volume
 ├── www/                      ← Volume
+├── tts-data/
+│   ├── config/               ← voice_to_speaker.yaml (im Repo)
+│   └── voices/               ← Piper-Modelle (gitignored, Bootstrap lädt Thorsten)
 └── backup/
     ├── backup-master.sh
     ├── .checksums            ← Checksummen (gitignored)

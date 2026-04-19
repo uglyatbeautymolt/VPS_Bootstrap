@@ -142,7 +142,19 @@
 <!-- Watchtower — innerhalb ugly-net -->
 <rect x="66" y="438" width="548" height="40" rx="8" class="c-green-fill" stroke-width="0.5"/>
 <text class="th th-green" x="340" y="458" text-anchor="middle">Watchtower — Auto-Update (02:30 UTC)</text>
-<text class="ts ts-green" x="340" y="472" text-anchor="middle">openclaw · searxng · nginx · roundcube — Docker Socket</text>
+<text class="ts ts-green" x="340" y="472" text-anchor="middle">openclaw · searxng · nginx · roundcube · whisper · tts — Docker Socket</text>
+
+<!-- Lokale KI-Dienste -->
+<text class="ts ts-violet" x="340" y="495" text-anchor="middle" font-style="italic">Lokale KI-Dienste — intern von OpenClaw genutzt</text>
+<rect x="66" y="502" width="220" height="66" rx="8" class="c-violet-fill" stroke-width="0.5"/>
+<text class="th th-violet" x="176" y="522" text-anchor="middle">Whisper STT</text>
+<text class="ts ts-violet" x="176" y="538" text-anchor="middle">:9000 — faster-whisper small</text>
+<text class="tu" x="176" y="554" text-anchor="middle">Deutsch · vol: whisper-models</text>
+
+<rect x="300" y="502" width="220" height="66" rx="8" class="c-violet-fill" stroke-width="0.5"/>
+<text class="th th-violet" x="410" y="522" text-anchor="middle">TTS — Piper</text>
+<text class="ts ts-violet" x="410" y="538" text-anchor="middle">:8000 — Thorsten (Deutsch)</text>
+<text class="tu" x="410" y="554" text-anchor="middle">vol: tts-data/voices/</text>
 
 <!-- ── Ausserhalb Docker Engine, innerhalb VPS ── -->
 
