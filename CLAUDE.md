@@ -3,6 +3,10 @@
 VPS: beautymolt.com (Hetzner CX22, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap | Betriebshandbuch: BETRIEB.md
 
+## ⚠️ ARBEITSREGEL FÜR CLAUDE
+
+**Nie raten bei Konfigurationswerten.** Vor jeder Änderung an openclaw.json oder bootstrap.sh: offizielle Dokumentation lesen oder Wert im laufenden System verifizieren (`docker exec openclaw ...`). Kein Wert darf angewendet werden, der nicht aus einer verifizierten Quelle stammt — auch wenn er "logisch klingt". Falsche Werte crashen den Container.
+
 ## ⚠️ BEKANNTE BOOTSTRAP-BUGS (bereits gefixt — nie nochmals einbauen)
 
 - **cron nicht installiert:** `cron` explizit in `apt-get install` + `systemctl enable/start cron`
@@ -69,7 +73,7 @@ Body: `{"message":"...","name":"Email","wakeMode":"now"}`
 Stattdessen: entweder beschreiben, wie Alex die Änderung manuell vornimmt — oder einen Prompt formulieren, den Alex an openclaw weitergibt, damit openclaw sich selbst konfiguriert. Bevorzugte Reihenfolge: (1) openclaw konfiguriert sich selbst, (2) Alex macht es manuell, (3) Claude beschreibt den Weg.
 
 ### Kritische Einstellungen (zur Referenz)
-- `bind: lan` — nie loopback (Dashboard setzt es manchmal zurück)
+- `bind: lan` — nie loopback-only (Dashboard setzt es manchmal zurück); gültige Werte: `auto`, `lan`, `loopback`, `custom`, `tailnet` — KEIN `all`
 - `hooks` ist **Top-Level-Key** — nie unter `gateway` einbetten
 - Hook Auth: `Authorization: Bearer` — nie `x-openclaw-token`
 - Debugging: `tail -50 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log`
