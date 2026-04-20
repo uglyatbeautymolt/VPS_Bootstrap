@@ -43,6 +43,10 @@ services:
     volumes:
       - ./openclaw-data:/home/node/.openclaw
       - ./www:/home/node/www  # Webadmin: schreibt HTML/CSS hier — nginx serviert aus /var/www/html
+    labels:
+      # sqlite3 nach jedem Watchtower-Update neu installieren (nicht im offiziellen Image enthalten)
+      - "com.centurylinklabs.watchtower.lifecycle.post-update=/bin/sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3'"
+      - "com.centurylinklabs.watchtower.lifecycle.uid=0"
     networks:
       - ugly-net
     depends_on:
@@ -115,6 +119,7 @@ services:
       - WATCHTOWER_SCHEDULE=0 30 2 * * *
       - WATCHTOWER_CLEANUP=true
       - WATCHTOWER_NO_STARTUP_MESSAGE=true
+      - WATCHTOWER_LIFECYCLE_HOOKS=true
       - WATCHTOWER_NOTIFICATIONS=email
       - WATCHTOWER_NOTIFICATION_EMAIL_FROM=ugly@beautymolt.com
       - WATCHTOWER_NOTIFICATION_EMAIL_TO=alex@alexstuder.ch
