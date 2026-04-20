@@ -288,7 +288,8 @@ if [ ! -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
 {
   "gateway": {
     "mode": "local",
-    "bind": "lan",
+    "bind": "custom",
+    "customBindHost": "0.0.0.0",
     "auth": { "mode": "token", "token": "${OPENCLAW_GATEWAY_TOKEN}" },
     "trustedProxies": ["10.0.0.0/8", "172.16.0.0/12"],
     "controlUi": {
@@ -396,8 +397,9 @@ try:
 except Exception as e:
     print(f"Lesefehler: {e}"); sys.exit(1)
 changed = False
-if cfg.get("gateway",{}).get("bind") != "lan":
-    cfg.setdefault("gateway",{})["bind"] = "lan"; changed = True; print("  Fix: bind → lan")
+gw = cfg.setdefault("gateway", {})
+if gw.get("bind") != "custom" or gw.get("customBindHost") != "0.0.0.0":
+    gw["bind"] = "custom"; gw["customBindHost"] = "0.0.0.0"; changed = True; print("  Fix: bind → custom + customBindHost 0.0.0.0")
 if not cfg.get("hooks",{}).get("enabled"):
     hook_token = ""
     try:

@@ -118,7 +118,7 @@ Body: `{"message":"...","name":"Email","wakeMode":"now"}`
 Stattdessen: entweder beschreiben, wie Alex die Änderung manuell vornimmt — oder einen Prompt formulieren, den Alex an openclaw weitergibt, damit openclaw sich selbst konfiguriert. Bevorzugte Reihenfolge: (1) openclaw konfiguriert sich selbst, (2) Alex macht es manuell, (3) Claude beschreibt den Weg.
 
 ### Kritische Einstellungen (zur Referenz)
-- `bind: lan` — nie loopback-only (Dashboard setzt es manchmal zurück); gültige Werte: `auto`, `lan`, `loopback`, `custom`, `tailnet` — KEIN `all`
+- `bind: custom` + `customBindHost: 0.0.0.0` — bindet auf alle Interfaces (LAN + Loopback); nötig damit Subagent-Announces via `ws://127.0.0.1` nicht timeouten; nie `loopback`-only (bricht nginx) und nie `all` (kein gültiger Wert)
 - `hooks` ist **Top-Level-Key** — nie unter `gateway` einbetten
 - Hook Auth: `Authorization: Bearer` — nie `x-openclaw-token`
 - Debugging: `tail -50 /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log`
