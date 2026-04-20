@@ -52,6 +52,10 @@ else
   echo ""
   SECRETS=(
     CLOUDFLARE_TUNNEL_TOKEN
+    CF_TOKEN
+    CF_ZONE_ID
+    CF_ACCOUNT_ID
+    CF_TUNNEL_ID
     OPENROUTER_API_KEY
     TELEGRAM_BOT_TOKEN
     OPENCLAW_GATEWAY_TOKEN
@@ -139,6 +143,10 @@ case "$SECRET_NAME" in
     ;;
   CLOUDFLARE_TUNNEL_TOKEN)
     CONTAINER="cloudflared"
+    ;;
+  CF_TOKEN|CF_ZONE_ID|CF_ACCOUNT_ID|CF_TUNNEL_ID)
+    CONTAINER=""
+    warn "$SECRET_NAME ist ein Cloudflare API-Wert — kein Container-Neustart nötig"
     ;;
   *)
     CONTAINER=""
