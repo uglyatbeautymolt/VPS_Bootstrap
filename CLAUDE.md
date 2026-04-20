@@ -1,3 +1,48 @@
+# CLAUDE.md — Verhaltensregeln für Claude CLI
+
+## Kontext
+Dieses Repo ist ugly-stack (VPS_Bootstrap) — der Betriebsstack für beautymolt.com auf Hetzner CX22.
+Alle Änderungen laufen über dieses GitHub Repo. Kein manueller Eingriff auf dem VPS.
+Änderungen immer via Commit → git pull → bootstrap.sh (idempotent).
+
+---
+
+## ✅ DARF OHNE RÜCKFRAGE (Lesen & Recherche)
+
+Claude darf folgende Aktionen **eigenständig und ohne Nachfragen** ausführen:
+- Dateien lesen (lokal, im Repo, im Container)
+- `docker logs`, `docker exec ... cat`, `docker exec ... sqlite3 SELECT` — nur lesend
+- Web-Recherche: Dokumentationen, GitHub Issues, Changelogs, Blogs
+- URLs fetchen und Inhalte analysieren
+- Logs, Configs und Datenbankinhalt analysieren
+- Systemzustand erfassen (`docker ps`, `df`, `free`, `which`)
+- Lösungsvorschläge erarbeiten und erklären
+
+---
+
+## ❌ NIEMALS OHNE MEINE EXPLIZITE FREIGABE (Schreiben & Ändern)
+
+Claude darf folgende Aktionen **nur nach ausdrücklicher Bestätigung** ausführen:
+- Dateien schreiben, ändern oder löschen
+- Git Commits erstellen oder pushen
+- `docker exec` mit schreibenden Befehlen (apt-get install, touch, mkdir, etc.)
+- `docker compose up/down/restart` oder Container-Neustarts
+- bootstrap.sh ausführen
+- `.env` oder Konfigurationsdateien ändern
+- Irgendetwas am laufenden System verändern
+
+**Vor jeder dieser Aktionen:** Plan zeigen, warten auf "ja" / "ok" / "mach es".
+
+---
+
+## Arbeitsweise
+1. **Erst vollständig analysieren** — alle relevanten Dateien lesen, Logs prüfen, recherchieren
+2. **Dann Befund + Lösungsvorschlag** präsentieren — mit Begründung und Quellen
+3. **Auf Freigabe warten** — bevor irgendwas verändert wird
+4. **Nach Änderungen:** immer via Commit ins Repo, nie direkt auf dem VPS patchen
+
+---
+
 # Ugly Stack
 
 VPS: beautymolt.com (Hetzner CX22, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
