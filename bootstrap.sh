@@ -439,6 +439,19 @@ docker compose up -d
 sleep 30
 docker compose ps
 
+# sqlite3 im OpenClaw Container installieren
+# Das offizielle ghcr.io/openclaw/openclaw Image (node:24-bookworm) enthält kein sqlite3.
+# Die Agenten brauchen es um "exec: sqlite3 ..." Befehle auszuführen.
+# Idempotent: wird nur installiert wenn nicht vorhanden.
+info "sqlite3 im OpenClaw Container prüfen..."
+if docker exec -u 0 openclaw sh -c "command -v sqlite3" > /dev/null 2>&1; then
+  log "sqlite3 bereits im openclaw Container vorhanden"
+else
+  info "sqlite3 fehlt — installiere im openclaw Container..."
+  docker exec -u 0 openclaw bash -c "apt-get update -qq && apt-get install -y -qq sqlite3"
+  log "sqlite3 im openclaw Container installiert"
+fi
+
 fix_volume_ownership "$STACK_DIR/openclaw-data"
 fix_volume_ownership "$STACK_DIR/n8n-data"
 log "Volume-Ownership gesetzt (1000:alex, g+rX)"
