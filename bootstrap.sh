@@ -431,6 +431,11 @@ if brevo_key:
     if cfg["env"].get("BREVO_KEY") != brevo_key:
         cfg["env"]["BREVO_KEY"] = brevo_key
         changed = True; print("  Fix: BREVO_KEY in env-Sektion gesetzt")
+# main-Agent in agents.list sicherstellen (ab openclaw 2026.4.15 pflicht)
+agent_list = cfg.setdefault("agents", {}).setdefault("list", [])
+if not any(a.get("id") == "main" for a in agent_list):
+    agent_list.insert(0, {"id": "main"})
+    changed = True; print("  Fix: main-Agent in agents.list eingefügt")
 if changed:
     json.dump(cfg, open(path,"w"), indent=2); print("  openclaw.json aktualisiert")
 else:
