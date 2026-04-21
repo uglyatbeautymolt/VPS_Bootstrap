@@ -137,6 +137,8 @@ ugly-stack/
 - **n8n Workflow aktivieren:** `n8n update:workflow --all --active=true` (nicht `workflow activate`)
 - **openclaw Onboarding:** bereits abgeschlossen — nie nochmals durchführen
 - **bootstrap.sh Schritt 4:** clone-or-pull statt mv+clone — `docker-compose.override.yml` (gitignored) muss bei Re-Run erhalten bleiben
+- **ugly-net manuell erstellt:** `docker network create ugly-net` erstellt Netzwerk ohne Compose-Labels → `docker compose up` schlägt fehl mit "incorrect label". Fix: `docker compose down && docker network rm ugly-net && docker compose up -d`
+- **ugly-net name:** Netzwerk braucht `name: ugly-net` in `docker-compose.yml` damit override (`external: true`) es findet — ohne expliziten Namen lautet der Docker-Name `ugly-stack_ugly-net`
 
 ---
 
@@ -207,7 +209,7 @@ Stattdessen: entweder beschreiben, wie Alex die Änderung manuell vornimmt — o
 
 ## Brevo
 
-- `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via Brevo Skill — muss in `openclaw.json env`-Sektion stehen
+- `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via Brevo Skill — Skill liegt in `openclaw-data/workspace/skills/brevo/`
 - `BREVO_SMTP_API_KEY` (xsmtpsib-...): n8n SMTP + Watchtower SMTP
 - Absender immer: `ugly@beautymolt.com` (Name: Ugly)
 
@@ -218,9 +220,10 @@ Wechseln nur via CLI — Dashboard-Dropdown hat Bug.
 
 ## Backup
 
-Checksummen-basiert: nur bei Änderungen wird R2-Backup erstellt. `.env` bei Änderung → GPG → GitHub.
+Täglich alles sichern (kein selektives Backup — Datenverlustrisiko bei Rotation).
 Sonntags: WEEKLY-Backup (4 Wochen Rotation). Normale Backups: 7 Stück.
-Manuell: `bash backup/backup-master.sh` | Checksummen: `backup/.checksums`
+Nur `.env`-Checksumme wird gepflegt (für GitHub-Push bei Änderung).
+Manuell: `bash backup/backup-master.sh`
 
 ## Automatische Updates — Zeitplan (UTC)
 
