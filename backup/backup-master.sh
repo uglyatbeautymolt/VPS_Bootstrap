@@ -197,7 +197,7 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
   fi
 
   rm -rf "$STAGING"
-  mkdir -p "$STAGING"/{openclaw-data,n8n-data,nginx,www,portainer}
+  mkdir -p "$STAGING"/{openclaw-data,n8n-data,nginx,www,portainer,config-ref}
 
   for MODULE in "$MODULES_DIR"/*.sh; do
     NAME=$(basename "$MODULE" .sh)
@@ -210,6 +210,22 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
       STATUS[$NAME]="FEHLER beim Backup"
     fi
   done
+
+  # ── config-ref: Referenzkopien zur Rekonstruktion ──────────────────────
+  # Diese Dateien werden beim Restore NICHT automatisch eingespielt.
+  # Sie dienen ausschliesslich zur manuellen Einsicht / Rekonstruktion.
+  info "config-ref sichern..."
+  cp "$STACK_DIR/.env" \
+     "$STAGING/config-ref/env.ref"
+  cp "$STACK_DIR/docker-compose.yml" \
+     "$STAGING/config-ref/docker-compose.yml.ref"
+  [ -f "$STACK_DIR/docker-compose.override.yml" ] && \
+    cp "$STACK_DIR/docker-compose.override.yml" \
+       "$STAGING/config-ref/docker-compose.override.yml.ref" || true
+  sudo cp "$STACK_DIR/openclaw-data/openclaw.json" \
+       "$STAGING/config-ref/openclaw.json.ref" 2>/dev/null || true
+  log "config-ref gesichert (env, docker-compose, override, openclaw.json)"
+  # ── Ende config-ref ────────────────────────────────────────────────────
 
   info "Erstelle verschluesseltes Archiv..."
   tar -czf - -C "$STAGING" . | \
