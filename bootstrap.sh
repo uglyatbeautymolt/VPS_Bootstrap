@@ -408,6 +408,18 @@ if not cfg.get("hooks",{}).get("enabled"):
     except: pass
     cfg["hooks"] = {"enabled": True, "token": hook_token or "UglyHook2026!beautymolt", "path": "/hooks"}
     changed = True; print("  Fix: hooks Block hinzugefügt")
+# BREVO_KEY in env-Sektion sicherstellen
+# Der eingebaute Brevo-Skill liest den Key aus openclaw.json env — nicht aus Docker-Env-Vars
+brevo_key = ""
+try:
+    for line in open("$STACK_DIR/.env"):
+        if line.startswith("BREVO_KEY="): brevo_key = line.strip().split("=",1)[1]
+except: pass
+if brevo_key:
+    cfg.setdefault("env", {})
+    if cfg["env"].get("BREVO_KEY") != brevo_key:
+        cfg["env"]["BREVO_KEY"] = brevo_key
+        changed = True; print("  Fix: BREVO_KEY in env-Sektion gesetzt")
 if changed:
     json.dump(cfg, open(path,"w"), indent=2); print("  openclaw.json aktualisiert")
 else:
