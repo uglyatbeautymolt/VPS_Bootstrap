@@ -35,6 +35,42 @@ Claude darf folgende Aktionen **nur nach ausdrücklicher Bestätigung** ausführ
 
 ---
 
+## ⚠️ KEYS NIE IM KLARTEXT ANZEIGEN
+
+**Alle Befehle die Secrets ausgeben könnten, MÜSSEN maskiert werden.**
+Das gilt für: `.env`, `docker exec env`, `openclaw.json`, `rclone.conf`, und alle anderen Config-Dateien.
+
+Anzeige von Vorhandensein ohne Wert — Konvention:
+- Key vorhanden und nicht leer → `***` (z.B. `BREVO_KEY=***`)
+- Key vorhanden aber leer      → `(leer)`
+- Key fehlt komplett           → `(fehlt)`
+
+Standard-Befehl für `docker exec env`:
+```
+docker exec <container> env | grep <TERM> | sed 's/=.*/=***/'
+```
+
+Standard-Befehl für JSON-Configs (openclaw.json etc.):
+```
+cat <datei> | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+def mask(obj):
+    if isinstance(obj,dict):
+        return {k: '***' if any(x in k.lower() for x in ['token','key','password','secret','auth']) else mask(v) for k,v in obj.items()}
+    if isinstance(obj,list): return [mask(i) for i in obj]
+    return obj
+print(json.dumps(mask(d),indent=2))
+"
+```
+
+Standard-Befehl für `.env`:
+```
+grep -v '^#' <datei> | grep '=' | sed 's/=.*/=***/'
+```
+
+---
+
 ## Arbeitsweise
 1. **Erst vollständig analysieren** — alle relevanten Dateien lesen, Logs prüfen, recherchieren
 2. **Dann Befund + Lösungsvorschlag** präsentieren — mit Begründung und Quellen
@@ -153,7 +189,7 @@ Manuell: `bash backup/backup-master.sh` | Checksummen: `backup/.checksums`
 | 02:00 | Backup + .env sync + Status-Mail | `/etc/cron.d/ugly-backup` |
 | 02:30 | Watchtower — Container-Images | Watchtower intern |
 | 03:00 | unattended-upgrades | systemd Timer |
-| 03:30 | Automatischer Neustart falls Kernel-Update | unattended-upgrades |
+| 03:30 | Automatischer Reboot falls Kernel-Update | unattended-upgrades |
 
 ## Portainer
 
