@@ -10,3 +10,4 @@ backup/.www-checksum
 backup/.checksums
 roundcube-data/
 tts-data/voices/
+docker-compose.override.yml

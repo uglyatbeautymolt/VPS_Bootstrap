@@ -230,16 +230,26 @@ log "unattended-upgrades konfiguriert (03:00 UTC, Reboot 03:30, Mail-Hook aktiv)
 log "System bereit"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 4 — REPO CLONEN + .env ENTSCHLÜSSELN
+# SCHRITT 4 — REPO CLONEN ODER AKTUALISIEREN + .env ENTSCHLÜSSELN
 # ─────────────────────────────────────────────────────────────
-info "Schritt 4/8 — Repository clonen..."
+info "Schritt 4/8 — Repository clonen oder aktualisieren..."
 
-if [ -d "$STACK_DIR" ]; then
-  warn "$STACK_DIR existiert — wird gesichert"
-  mv "$STACK_DIR" "${STACK_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
+# Clone-or-Pull: bestehendes Repo wird per git pull --rebase aktualisiert.
+# Das bewahrt vom forge-Bootstrap geschriebene docker-compose.override.yml
+# (in .gitignore) — sie überlebt den Re-Run unverändert.
+if [ -d "$STACK_DIR/.git" ] && git -C "$STACK_DIR" remote get-url origin 2>/dev/null | grep -q "uglyatbeautymolt/VPS_Bootstrap"; then
+  info "Repository vorhanden — aktualisiere via git pull --rebase..."
+  git -C "$STACK_DIR" pull --rebase origin main \
+    || fail "git pull --rebase fehlgeschlagen — Repository-Zustand prüfen"
+  log "Repository aktualisiert"
+else
+  if [ -d "$STACK_DIR" ]; then
+    warn "$STACK_DIR existiert (kein VPS_Bootstrap Repo) — wird gesichert"
+    mv "$STACK_DIR" "${STACK_DIR}_backup_$(date +%Y%m%d_%H%M%S)"
+  fi
+  git clone "$REPO_URL" "$STACK_DIR"
+  log "Repository geklont"
 fi
-
-git clone "$REPO_URL" "$STACK_DIR"
 cd "$STACK_DIR"
 [ ! -f ".env.gpg" ] && fail ".env.gpg nicht im Repository gefunden"
 
@@ -265,9 +275,10 @@ log "Scripts ausführbar + ugly-upgrades-mail.sh aus Repo installiert"
 
 mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 
-grep -q "roundcube-data/"      "$STACK_DIR/.gitignore" || echo "roundcube-data/"      >> "$STACK_DIR/.gitignore"
-grep -q "backup/www-sync.sh"   "$STACK_DIR/.gitignore" || echo "backup/www-sync.sh"   >> "$STACK_DIR/.gitignore"
-grep -q "backup/.www-checksum" "$STACK_DIR/.gitignore" || echo "backup/.www-checksum" >> "$STACK_DIR/.gitignore"
+grep -q "roundcube-data/"             "$STACK_DIR/.gitignore" || echo "roundcube-data/"             >> "$STACK_DIR/.gitignore"
+grep -q "backup/www-sync.sh"          "$STACK_DIR/.gitignore" || echo "backup/www-sync.sh"          >> "$STACK_DIR/.gitignore"
+grep -q "backup/.www-checksum"        "$STACK_DIR/.gitignore" || echo "backup/.www-checksum"        >> "$STACK_DIR/.gitignore"
+grep -q "docker-compose.override.yml" "$STACK_DIR/.gitignore" || echo "docker-compose.override.yml" >> "$STACK_DIR/.gitignore"
 log ".gitignore aktualisiert"
 
 cat > /etc/sudoers.d/alex-ugly-stack << SUDOERS
