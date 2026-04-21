@@ -47,7 +47,7 @@ Anzeige von Vorhandensein ohne Wert — Konvention:
 
 Standard-Befehl für `docker exec env`:
 ```
-docker exec <container> env | grep <TERM> | sed 's/=.*/=***/'
+docker exec <container> env | grep <TERM> | sed 's/=.*/=***/' 
 ```
 
 Standard-Befehl für JSON-Configs (openclaw.json etc.):
@@ -66,7 +66,7 @@ print(json.dumps(mask(d),indent=2))
 
 Standard-Befehl für `.env`:
 ```
-grep -v '^#' <datei> | grep '=' | sed 's/=.*/=***/'
+grep -v '^#' <datei> | grep '=' | sed 's/=.*/=***/' 
 ```
 
 ---
@@ -97,13 +97,28 @@ ugly-forge bootstrap.sh greift direkt auf ugly-stack zu:
 - Liest `ugly-stack/.env` (PROJEKT_GPG_KEY, GITHUB_TOKEN etc.)
 - Schreibt Skills nach `ugly-stack/openclaw-data/skills/`
 - Mergt Agenten in `ugly-stack/openclaw-data/openclaw.json`
-- Modifiziert `ugly-stack/docker-compose.yml` (DB Mount, forge-dashboard)
+- Kopiert `docker-compose.override.yml` nach `ugly-stack/` (DB Mount + forge-dashboard)
 - Modifiziert `ugly-stack/nginx/conf.d/` (dashboard.beautymolt.com)
 
-**Wichtige Regel:** Bei Problemen mit openclaw.json, Skills oder docker-compose.yml IMMER beide Repos prüfen — ugly-forge bootstrap.sh kann Änderungen von ugly-stack überschreiben oder ergänzen. Insbesondere:
-- Skills in `openclaw-data/skills/` werden von ugly-forge bei jedem Bootstrap **neu geschrieben** (rm -rf + cp)
-- openclaw.json wird von ugly-forge gemergt (Agenten-Liste) aber nicht überschrieben
-- `BREVO_KEY` muss in `openclaw.json env`-Sektion stehen — wird von ugly-stack bootstrap.sh gesetzt
+**Wichtige Regel:** Bei Problemen mit openclaw.json, Skills oder docker-compose immer beide Repos prüfen.
+
+### docker-compose Architektur (modular)
+
+```
+ugly-stack/
+  docker-compose.yml            ← VPS_Bootstrap Repo (Basis-Stack, versioniert)
+  docker-compose.override.yml   ← ugly-forge Repo (Forge-Erweiterungen, gitignored in VPS_Bootstrap)
+```
+
+- `docker-compose.yml` enthält den Kern-Stack (openclaw, n8n, nginx, etc.) — nie von forge angepasst
+- `docker-compose.override.yml` wird von ugly-forge bootstrap.sh nach `ugly-stack/` kopiert
+- Docker Compose lädt beide Dateien automatisch (kein `-f` Flag nötig)
+- `docker-compose.override.yml` ist in `.gitignore` → überlebt VPS_Bootstrap Re-Runs
+- Beim ugly-forge uninstall wird `docker-compose.override.yml` gelöscht
+
+**Inhalt override:** openclaw DB-Mount (`/home/alex/ugly-forge/db:/home/node/forge-db`) + forge-dashboard Service
+
+**Idempotenz-Regel:** VPS_Bootstrap Re-Run macht `git pull --rebase` (nicht mehr `mv + clone`) → override bleibt erhalten → forge läuft unverändert weiter.
 
 ---
 
@@ -121,6 +136,7 @@ ugly-forge bootstrap.sh greift direkt auf ugly-stack zu:
 - **Portainer Admin-Init:** Bereitschaft via `/api/system/status` (nicht `/api/status` — deprecated)
 - **n8n Workflow aktivieren:** `n8n update:workflow --all --active=true` (nicht `workflow activate`)
 - **openclaw Onboarding:** bereits abgeschlossen — nie nochmals durchführen
+- **bootstrap.sh Schritt 4:** clone-or-pull statt mv+clone — `docker-compose.override.yml` (gitignored) muss bei Re-Run erhalten bleiben
 
 ---
 
@@ -146,6 +162,7 @@ Frischer Ubuntu 24.04 VPS → ein Befehl → kompletter Stack. Inputs: Bitwarden
 | portainer | portainer.beautymolt.com | 9000 (HTTP intern) |
 | watchtower | — | — |
 | cloudflared | — | — |
+| forge-dashboard | dashboard.beautymolt.com | 3001 (via override) |
 
 Docker Bridge-Netzwerk: **ugly-net**
 
@@ -227,6 +244,11 @@ Manuell: `bash backup/backup-master.sh` | Checksummen: `backup/.checksums`
 Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP), Passwort für alex.
 Setzt automatisch: `bind: custom + 0.0.0.0`, hooks-Block, BREVO_KEY in openclaw.json env, sudoers 60min, unattended-upgrades, Backup-Cron via `/etc/cron.d/`.
 Versionsformat: `V.YYYYMMDD_HHMMSS` (TZ=Europe/Zurich).
+
+**Schritt 4 — clone-or-pull:**
+- Bestehendes VPS_Bootstrap Repo → `git pull --rebase origin main` (kein mv+clone)
+- `docker-compose.override.yml` liegt in `.gitignore` → überlebt den Re-Run
+- Kein VPS_Bootstrap Repo vorhanden → normaler `git clone`
 
 ## ⚠️ Regel: Architektur zuerst
 
