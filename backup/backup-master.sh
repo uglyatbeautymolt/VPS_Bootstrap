@@ -214,6 +214,7 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
   # ── config-ref: Referenzkopien zur Rekonstruktion ──────────────────────
   # Diese Dateien werden beim Restore NICHT automatisch eingespielt.
   # Sie dienen ausschliesslich zur manuellen Einsicht / Rekonstruktion.
+  # sudo cat statt sudo cp — Datei gehoert alex, kein Passwort-Prompt im Cron
   info "config-ref sichern..."
   cp "$STACK_DIR/.env" \
      "$STAGING/config-ref/env.ref"
@@ -222,8 +223,8 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
   [ -f "$STACK_DIR/docker-compose.override.yml" ] && \
     cp "$STACK_DIR/docker-compose.override.yml" \
        "$STAGING/config-ref/docker-compose.override.yml.ref" || true
-  sudo cp "$STACK_DIR/openclaw-data/openclaw.json" \
-       "$STAGING/config-ref/openclaw.json.ref" 2>/dev/null || true
+  sudo cat "$STACK_DIR/openclaw-data/openclaw.json" \
+       > "$STAGING/config-ref/openclaw.json.ref" 2>/dev/null || true
   log "config-ref gesichert (env, docker-compose, override, openclaw.json)"
   # ── Ende config-ref ────────────────────────────────────────────────────
 
@@ -265,7 +266,7 @@ if [ "$NEEDS_BACKUP" = "true" ]; then
     | sort | awk '{print $2}' | grep 'WEEKLY' || true)
   COUNT=$(count_lines "$WEEKLY_BACKUPS")
   if [ "$COUNT" -gt 4 ]; then
-    TO_DELETE=$(echo "$WEEKLY_BACKUPS" | head -n $((COUNT - 4)))
+    TO_DELETE=$(echo "$WEEKLY_BACKUPS" | head -d $((COUNT - 4)))
     for F in $TO_DELETE; do
       rclone delete "r2:${CF_R2_BUCKET}/backups/$F" \
         --config "$STACK_DIR/rclone/rclone.conf"
