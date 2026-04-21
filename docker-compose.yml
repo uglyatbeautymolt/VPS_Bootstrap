@@ -171,3 +171,4 @@ volumes:
 networks:
   ugly-net:
     driver: bridge
+    name: ugly-net  # expliziter Name — verhindert Prefix (ugly-stack_ugly-net), noetig fuer override external: true
