@@ -84,6 +84,29 @@ grep -v '^#' <datei> | grep '=' | sed 's/=.*/=***/'
 VPS: beautymolt.com (Hetzner CX22, Ubuntu 24.04) | Stack: /home/alex/ugly-stack | User: alex
 Repo: https://github.com/uglyatbeautymolt/VPS_Bootstrap | Betriebshandbuch: BETRIEB.md
 
+## Verwandte Repos
+
+| Repo | Zweck | Pfad auf VPS |
+|------|-------|--------------|
+| uglyatbeautymolt/VPS_Bootstrap | Haupt-Stack (ugly-stack) | /home/alex/ugly-stack |
+| uglyatbeautymolt/ugly-forge | Entwicklungsagenten + Skills für openclaw | /home/alex/ugly-forge |
+
+### Interaktion zwischen den Repos
+
+ugly-forge bootstrap.sh greift direkt auf ugly-stack zu:
+- Liest `ugly-stack/.env` (PROJEKT_GPG_KEY, GITHUB_TOKEN etc.)
+- Schreibt Skills nach `ugly-stack/openclaw-data/skills/`
+- Mergt Agenten in `ugly-stack/openclaw-data/openclaw.json`
+- Modifiziert `ugly-stack/docker-compose.yml` (DB Mount, forge-dashboard)
+- Modifiziert `ugly-stack/nginx/conf.d/` (dashboard.beautymolt.com)
+
+**Wichtige Regel:** Bei Problemen mit openclaw.json, Skills oder docker-compose.yml IMMER beide Repos prüfen — ugly-forge bootstrap.sh kann Änderungen von ugly-stack überschreiben oder ergänzen. Insbesondere:
+- Skills in `openclaw-data/skills/` werden von ugly-forge bei jedem Bootstrap **neu geschrieben** (rm -rf + cp)
+- openclaw.json wird von ugly-forge gemergt (Agenten-Liste) aber nicht überschrieben
+- `BREVO_KEY` muss in `openclaw.json env`-Sektion stehen — wird von ugly-stack bootstrap.sh gesetzt
+
+---
+
 ## ⚠️ ARBEITSREGEL FÜR CLAUDE
 
 **Nie raten bei Konfigurationswerten.** Vor jeder Änderung an openclaw.json oder bootstrap.sh: offizielle Dokumentation lesen oder Wert im laufenden System verifizieren (`docker exec openclaw ...`). Kein Wert darf angewendet werden, der nicht aus einer verifizierten Quelle stammt — auch wenn er "logisch klingt". Falsche Werte crashen den Container.
@@ -167,7 +190,7 @@ Stattdessen: entweder beschreiben, wie Alex die Änderung manuell vornimmt — o
 
 ## Brevo
 
-- `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via Brevo Skill
+- `BREVO_KEY` (xkeysib-...): openclaw E-Mail-Versand via Brevo Skill — muss in `openclaw.json env`-Sektion stehen
 - `BREVO_SMTP_API_KEY` (xsmtpsib-...): n8n SMTP + Watchtower SMTP
 - Absender immer: `ugly@beautymolt.com` (Name: Ugly)
 
@@ -202,7 +225,7 @@ Manuell: `bash backup/backup-master.sh` | Checksummen: `backup/.checksums`
 ## Bootstrap
 
 Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP), Passwort für alex.
-Setzt automatisch: `bind: lan`, hooks-Block, sudoers 60min, unattended-upgrades, Backup-Cron via `/etc/cron.d/`.
+Setzt automatisch: `bind: custom + 0.0.0.0`, hooks-Block, BREVO_KEY in openclaw.json env, sudoers 60min, unattended-upgrades, Backup-Cron via `/etc/cron.d/`.
 Versionsformat: `V.YYYYMMDD_HHMMSS` (TZ=Europe/Zurich).
 
 ## ⚠️ Regel: Architektur zuerst
