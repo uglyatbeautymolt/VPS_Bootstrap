@@ -239,7 +239,7 @@ info "Schritt 4/8 — Repository clonen oder aktualisieren..."
 # (in .gitignore) — sie überlebt den Re-Run unverändert.
 if [ -d "$STACK_DIR/.git" ] && git -C "$STACK_DIR" remote get-url origin 2>/dev/null | grep -q "uglyatbeautymolt/VPS_Bootstrap"; then
   info "Repository vorhanden — aktualisiere via git pull --rebase..."
-  git -C "$STACK_DIR" pull --rebase origin main \
+  git -C "$STACK_DIR" pull --rebase --autostash origin main \
     || fail "git pull --rebase fehlgeschlagen — Repository-Zustand prüfen"
   log "Repository aktualisiert"
 else
