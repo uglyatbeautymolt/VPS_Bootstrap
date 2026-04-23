@@ -8,14 +8,13 @@ RUN apt-get update -qq && apt-get install -y -qq \
 
 WORKDIR /app
 
-# --recurse-submodules --shallow-submodules: fetcht mini-swe-agent am gepinnten Commit
-# (getrenntes `git submodule update` nach shallow clone schlaegt fehl -- Commit nicht im History)
-RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
-    https://github.com/NousResearch/hermes-agent .
+# Shallow clone ohne Submoduln — mini-swe-agent wird separat via pip installiert
+RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent .
 
-# mini-swe-agent als lokales Package installieren (nicht in pyproject dependencies)
-# Pfad muss ./ haben -- sonst interpretiert pip es als Package-Name statt lokalem Pfad
-RUN pip install --no-cache-dir -e "./mini-swe-agent"
+# mini-swe-agent direkt am gepinnten Commit installieren (identisch zum Submodul-Pointer).
+# Umgeht shallow-submodule Probleme mit historischen Commits.
+RUN pip install --no-cache-dir \
+    "git+https://github.com/SWE-agent/mini-swe-agent.git@07aa6a738556e44b30d7b5c3bbd5063dac871d25"
 
 # Hermes installieren: messaging (Telegram), cron, cli, pty, mcp
 # Kein voice-Extra — kein lokaler Whisper auf CX22 (kein GPU, wenig RAM)
