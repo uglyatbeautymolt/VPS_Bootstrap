@@ -14,7 +14,8 @@ RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
     https://github.com/NousResearch/hermes-agent .
 
 # mini-swe-agent als lokales Package installieren (nicht in pyproject dependencies)
-RUN pip install --no-cache-dir -e "mini-swe-agent"
+# Pfad muss ./ haben -- sonst interpretiert pip es als Package-Name statt lokalem Pfad
+RUN pip install --no-cache-dir -e "./mini-swe-agent"
 
 # Hermes installieren: messaging (Telegram), cron, cli, pty, mcp
 # Kein voice-Extra — kein lokaler Whisper auf CX22 (kein GPU, wenig RAM)
