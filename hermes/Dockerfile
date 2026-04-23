@@ -8,9 +8,10 @@ RUN apt-get update -qq && apt-get install -y -qq \
 
 WORKDIR /app
 
-# Shallow clone + Submodul mini-swe-agent (required terminal backend)
-RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent . && \
-    git submodule update --init mini-swe-agent
+# --recurse-submodules --shallow-submodules: fetcht mini-swe-agent am gepinnten Commit
+# (getrenntes `git submodule update` nach shallow clone schlaegt fehl -- Commit nicht im History)
+RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
+    https://github.com/NousResearch/hermes-agent .
 
 # mini-swe-agent als lokales Package installieren (nicht in pyproject dependencies)
 RUN pip install --no-cache-dir -e "mini-swe-agent"
