@@ -168,6 +168,7 @@ services:
     image: nousresearch/hermes-agent:latest
     container_name: hermes
     restart: unless-stopped
+    command: gateway run
     environment:
       - TELEGRAM_BOT_TOKEN=${HERMES_TELEGRAM_BOT_TOKEN}
       - TELEGRAM_ALLOWED_USERS=${HERMES_TELEGRAM_ALLOWED_USERS}
