@@ -426,7 +426,7 @@ else
 fi
 
 # ── hermes config.yaml (idempotent) ──────────────────────────────────────────
-# Minimal-Config damit hermes gateway start ohne interaktiven Setup-Wizard läuft.
+# Minimal-Config damit hermes gateway run ohne interaktiven Setup-Wizard läuft.
 # provider: "auto" erkennt OPENROUTER_API_KEY automatisch aus den Docker Env-Vars.
 # Nicht überschreiben wenn vorhanden (z.B. nach Backup-Restore mit gespeicherter Config).
 if [ ! -f "$STACK_DIR/hermes-data/config.yaml" ]; then
@@ -515,11 +515,6 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 6/8 — Stack starten..."
 cd "$STACK_DIR"
-
-# hermes Image lokal bauen (kein offizielles Image auf Docker Hub / ghcr.io)
-info "hermes Image bauen (NousResearch/hermes-agent, ~2-3 Min)..."
-docker compose build hermes
-log "hermes Image gebaut"
 
 docker compose pull --ignore-pull-failures
 docker compose up -d
