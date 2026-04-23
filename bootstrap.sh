@@ -273,7 +273,7 @@ cp "$STACK_DIR/scripts/ugly-upgrades-mail.sh" /usr/local/bin/ugly-upgrades-mail.
 chmod +x /usr/local/bin/ugly-upgrades-mail.sh
 log "Scripts ausführbar + ugly-upgrades-mail.sh aus Repo installiert"
 
-mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
+mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www,hermes-data}
 
 grep -q "roundcube-data/"             "$STACK_DIR/.gitignore" || echo "roundcube-data/"             >> "$STACK_DIR/.gitignore"
 grep -q "backup/www-sync.sh"          "$STACK_DIR/.gitignore" || echo "backup/www-sync.sh"          >> "$STACK_DIR/.gitignore"
@@ -398,6 +398,33 @@ else
   warn "Kein Backup gefunden — frischer Start"
 fi
 
+# ── nginx Block für hermes.beautymolt.com (idempotent) ───────────────────────
+# Wird nach Backup-Restore hinzugefügt — so bleibt das Backup-Conf erhalten
+# und der Block wird nur ergänzt wenn er noch fehlt.
+mkdir -p "$STACK_DIR/nginx/conf.d"
+NGINX_CONF="$STACK_DIR/nginx/conf.d/default.conf"
+if ! grep -q "hermes.beautymolt.com" "$NGINX_CONF" 2>/dev/null; then
+  cat >> "$NGINX_CONF" << 'NGINX_HERMES'
+
+server {
+    listen 80;
+    server_name hermes.beautymolt.com;
+    location / {
+        set $upstream http://hermes:8443;
+        proxy_pass $upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+NGINX_HERMES
+  log "nginx: hermes.beautymolt.com Block hinzugefügt"
+else
+  log "nginx: hermes.beautymolt.com bereits vorhanden"
+fi
+
 info "openclaw.json prüfen..."
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   python3 << PYFIX
@@ -464,6 +491,12 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 6/8 — Stack starten..."
 cd "$STACK_DIR"
+
+# hermes Image lokal bauen (kein offizielles Image auf Docker Hub / ghcr.io)
+info "hermes Image bauen (NousResearch/hermes-agent, ~2-3 Min)..."
+docker compose build hermes
+log "hermes Image gebaut"
+
 docker compose pull --ignore-pull-failures
 docker compose up -d
 sleep 30
@@ -660,7 +693,7 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────
-# ABSCHLUSS-KONTROLLE — IP, DNS, Zeitpläne
+# ABSCHLUSS-KONTROLLE — IP, DNS, CF Tunnel, Zeitpläne
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"
@@ -733,6 +766,78 @@ if [ -n "$CF_TOKEN" ] && [ -n "$CF_ZONE_ID" ] && [ "$VPS_IP" != "unbekannt" ]; t
 else
   echo -e "  ${YELLOW}[!]${NC} DNS-Update übersprungen — CF_TOKEN oder CF_ZONE_ID fehlen in .env"
 fi
+echo ""
+
+# ── Cloudflare Tunnel Ingress sicherstellen ──────────────────────────────────
+# Idempotent: GET → prüfen ob Eintrag existiert → nur bei Fehlen: PUT
+# Benötigt: CF_TOKEN, CF_ACCOUNT_ID, CF_TUNNEL_ID in .env
+ensure_cf_tunnel_ingress() {
+  local hostname="$1"
+  local service="$2"
+
+  if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT_ID" ] || [ -z "$CF_TUNNEL_ID" ]; then
+    warn "CF Tunnel: CF_TOKEN / CF_ACCOUNT_ID / CF_TUNNEL_ID fehlen — $hostname übersprungen"
+    return
+  fi
+
+  local tunnel_config
+  tunnel_config=$(curl -s \
+    "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/cfd_tunnel/${CF_TUNNEL_ID}/configurations" \
+    -H "Authorization: Bearer ${CF_TOKEN}")
+
+  if ! echo "$tunnel_config" | jq -e '.success' | grep -q true; then
+    local err; err=$(echo "$tunnel_config" | jq -r '.errors[0].message // "Antwort ungültig"' 2>/dev/null || echo "curl-Fehler")
+    warn "CF Tunnel GET fehlgeschlagen ($hostname): $err"
+    return
+  fi
+
+  if echo "$tunnel_config" | jq -e --arg h "$hostname" '.result.config.ingress[] | select(.hostname == $h)' > /dev/null 2>&1; then
+    log "CF Tunnel: $hostname bereits vorhanden — kein Update"
+    return
+  fi
+
+  local new_config
+  new_config=$(echo "$tunnel_config" | jq --arg h "$hostname" --arg s "$service" '
+    .result.config.ingress = (
+      [.result.config.ingress[] | select(.hostname != null and .service != "http_status:404")] +
+      [{"hostname": $h, "service": $s}] +
+      [{"service": "http_status:404"}]
+    )
+    | {config: (
+        {ingress: .result.config.ingress} +
+        if .result.config["warp-routing"] != null
+        then {"warp-routing": .result.config["warp-routing"]}
+        else {}
+        end
+      )}
+  ')
+
+  local put_result
+  put_result=$(curl -s -X PUT \
+    "https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/cfd_tunnel/${CF_TUNNEL_ID}/configurations" \
+    -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+    --data "$new_config")
+
+  if echo "$put_result" | jq -e '.success' | grep -q true; then
+    log "CF Tunnel: $hostname → $service hinzugefügt"
+  else
+    local cf_err; cf_err=$(echo "$put_result" | jq -r '.errors[0].message // "unbekannt"')
+    warn "CF Tunnel Update fehlgeschlagen ($hostname): $cf_err"
+  fi
+}
+
+info "Cloudflare Tunnel Ingress prüfen..."
+
+# Hermes — aktiv
+ensure_cf_tunnel_ingress "hermes.beautymolt.com" "http://nginx:80"
+
+# Weitere Container — in den nächsten Tagen aktivieren:
+# (Zeile auskommentieren + Bootstrap erneut ausführen)
+# ensure_cf_tunnel_ingress "claw.beautymolt.com"      "http://nginx:80"
+# ensure_cf_tunnel_ingress "search.beautymolt.com"    "http://nginx:80"
+# ensure_cf_tunnel_ingress "n8n.beautymolt.com"       "http://nginx:80"
+# ensure_cf_tunnel_ingress "mail.beautymolt.com"      "http://nginx:80"
+# ensure_cf_tunnel_ingress "portainer.beautymolt.com" "http://nginx:80"
 echo ""
 
 echo "  Zeitpläne (UTC):"
@@ -888,7 +993,8 @@ Services:
   https://search.beautymolt.com
   https://n8n.beautymolt.com
   https://www.beautymolt.com
-  https://portainer.beautymolt.com"
+  https://portainer.beautymolt.com
+  https://hermes.beautymolt.com"
 
   MAIL_PAYLOAD=$(jq -n \
     --arg subject "Ugly Stack installiert — $VPS_IP ($VPS_HOSTER)" \
@@ -933,6 +1039,7 @@ echo -e "  ${BLUE}n8n.beautymolt.com${NC}        n8n"
 echo -e "  ${BLUE}www.beautymolt.com${NC}        nginx"
 echo -e "  ${BLUE}mail.beautymolt.com${NC}       Roundcube"
 echo -e "  ${BLUE}portainer.beautymolt.com${NC}  Portainer"
+echo -e "  ${BLUE}hermes.beautymolt.com${NC}     Hermes Agent"
 echo ""
 echo "  ── Claude Code ────────────────────────────"
 if $CLAUDE_INSTALL_OK; then

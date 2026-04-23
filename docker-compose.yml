@@ -130,6 +130,7 @@ services:
     networks:
       - ugly-net
     command: openclaw searxng nginx roundcube whisper tts
+    # hermes fehlt bewusst — lokaler Build, kein Registry-Pull moeglich
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -161,6 +162,27 @@ services:
     volumes:
       - ./tts-data/config:/app/config
       - ./tts-data/voices:/app/voices
+    networks:
+      - ugly-net
+
+  hermes:
+    build: ./hermes
+    image: hermes-agent:local
+    container_name: hermes
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${HERMES_TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_ALLOWED_USERS=${HERMES_TELEGRAM_ALLOWED_USERS}
+      - TELEGRAM_WEBHOOK_URL=https://hermes.beautymolt.com/telegram
+      - TELEGRAM_WEBHOOK_PORT=8443
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - TERMINAL_ENV=local
+      - TZ=${TZ}
+    volumes:
+      - ./hermes-data:/root/.hermes
+    labels:
+      # Lokaler Build — Watchtower kann kein Registry-Pull durchfuehren
+      - "com.centurylinklabs.watchtower.enable=false"
     networks:
       - ugly-net
 
