@@ -464,7 +464,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 info "Schritt 6/8 — Stack starten..."
 cd "$STACK_DIR"
-docker compose pull
+docker compose pull --ignore-pull-failures
 docker compose up -d
 sleep 30
 docker compose ps
