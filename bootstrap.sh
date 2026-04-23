@@ -425,6 +425,30 @@ else
   log "nginx: hermes.beautymolt.com bereits vorhanden"
 fi
 
+# ── hermes config.yaml (idempotent) ──────────────────────────────────────────
+# Minimal-Config damit hermes gateway start ohne interaktiven Setup-Wizard läuft.
+# provider: "auto" erkennt OPENROUTER_API_KEY automatisch aus den Docker Env-Vars.
+# Nicht überschreiben wenn vorhanden (z.B. nach Backup-Restore mit gespeicherter Config).
+if [ ! -f "$STACK_DIR/hermes-data/config.yaml" ]; then
+  mkdir -p "$STACK_DIR/hermes-data"
+  cat > "$STACK_DIR/hermes-data/config.yaml" << 'HERMES_CONFIG'
+model:
+  provider: "auto"
+  base_url: "https://openrouter.ai/api/v1"
+
+terminal:
+  backend: "local"
+  cwd: "."
+  timeout: 180
+
+agent:
+  max_turns: 60
+HERMES_CONFIG
+  log "hermes: config.yaml erstellt (~/.hermes/config.yaml im Container)"
+else
+  log "hermes: config.yaml bereits vorhanden"
+fi
+
 info "openclaw.json prüfen..."
 if [ -f "$STACK_DIR/openclaw-data/openclaw.json" ]; then
   python3 << PYFIX
