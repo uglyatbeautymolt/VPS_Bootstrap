@@ -695,21 +695,17 @@ else
   warn "Claude Code Installation fehlgeschlagen — manuell: npm install -g @anthropic-ai/claude-code"
 fi
 
-if [ -n "$ANTHROPIC_API_KEY" ]; then
-  if grep -q "^ANTHROPIC_API_KEY=" /etc/environment 2>/dev/null; then
-    sed -i "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}|" /etc/environment
-  else
-    echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> /etc/environment
-  fi
-  if grep -q "^export ANTHROPIC_API_KEY=" /home/alex/.bashrc 2>/dev/null; then
-    sed -i "s|^export ANTHROPIC_API_KEY=.*|export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}|" /home/alex/.bashrc
-  else
-    echo "export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> /home/alex/.bashrc
-  fi
-  log "ANTHROPIC_API_KEY in /etc/environment + /home/alex/.bashrc eingetragen"
-else
-  warn "ANTHROPIC_API_KEY fehlt in .env — Key setzen mit: bash set-secret.sh ANTHROPIC_API_KEY 'sk-ant-...'"
+# Abo-Modus: kein ANTHROPIC_API_KEY — Auth via OAuth (claude login)
+# Alten Key bereinigen falls aus früherer Installation vorhanden (idempotent)
+if grep -q "ANTHROPIC_API_KEY" /etc/environment 2>/dev/null; then
+  sed -i '/^ANTHROPIC_API_KEY=/d' /etc/environment
+  log "ANTHROPIC_API_KEY aus /etc/environment entfernt (Abo-Modus)"
 fi
+if grep -q "ANTHROPIC_API_KEY" /home/alex/.bashrc 2>/dev/null; then
+  sed -i '/ANTHROPIC_API_KEY/d' /home/alex/.bashrc
+  log "ANTHROPIC_API_KEY aus .bashrc entfernt (Abo-Modus)"
+fi
+log "Claude Code läuft im Abo-Modus — Auth nach Bootstrap: su - alex && claude login"
 
 # ─────────────────────────────────────────────────────────────
 # ABSCHLUSS-KONTROLLE — IP, DNS, CF Tunnel, Zeitpläne
@@ -1013,7 +1009,12 @@ Services:
   https://n8n.beautymolt.com
   https://www.beautymolt.com
   https://portainer.beautymolt.com
-  https://hermes.beautymolt.com"
+  https://hermes.beautymolt.com
+
+----------------------------------------
+Claude Code:
+  Modus: Abo (OAuth)
+  Auth nach Bootstrap: su - alex && claude login"
 
   MAIL_PAYLOAD=$(jq -n \
     --arg subject "Ugly Stack installiert — $VPS_IP ($VPS_HOSTER)" \
@@ -1063,9 +1064,7 @@ echo ""
 echo "  ── Claude Code ────────────────────────────"
 if $CLAUDE_INSTALL_OK; then
   echo -e "  ${GREEN}[✓]${NC} claude installiert: $CLAUDE_VERSION"
-  [ -n "$ANTHROPIC_API_KEY" ] \
-    && echo -e "  ${GREEN}[✓]${NC} ANTHROPIC_API_KEY gesetzt" \
-    || echo -e "  ${YELLOW}[!]${NC} ANTHROPIC_API_KEY fehlt — bash set-secret.sh ANTHROPIC_API_KEY 'sk-ant-...'"
+  echo -e "  ${YELLOW}[!]${NC} Auth nötig: su - alex && claude login"
 else
   echo -e "  ${YELLOW}[!]${NC} Claude Code nicht installiert — manuell: npm install -g @anthropic-ai/claude-code"
 fi
