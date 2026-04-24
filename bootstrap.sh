@@ -707,6 +707,15 @@ if grep -q "ANTHROPIC_API_KEY" /home/alex/.bashrc 2>/dev/null; then
 fi
 log "Claude Code läuft im Abo-Modus — Auth nach Bootstrap: su - alex && claude login"
 
+# Alias: claude immer mit --dangerously-skip-permissions aufrufen
+# CLAUDE.md im Projektverzeichnis enthält strikte Verhaltensregeln — der Flag ist sicher
+if grep -q "alias claude=" /home/alex/.bashrc 2>/dev/null; then
+  sed -i "s|alias claude=.*|alias claude='claude --dangerously-skip-permissions'|" /home/alex/.bashrc
+else
+  echo "alias claude='claude --dangerously-skip-permissions'" >> /home/alex/.bashrc
+fi
+log "claude alias gesetzt (--dangerously-skip-permissions)"
+
 # ─────────────────────────────────────────────────────────────
 # ABSCHLUSS-KONTROLLE — IP, DNS, CF Tunnel, Zeitpläne
 # ─────────────────────────────────────────────────────────────
@@ -1064,6 +1073,7 @@ echo ""
 echo "  ── Claude Code ────────────────────────────"
 if $CLAUDE_INSTALL_OK; then
   echo -e "  ${GREEN}[✓]${NC} claude installiert: $CLAUDE_VERSION"
+  echo -e "  ${GREEN}[✓]${NC} alias: claude --dangerously-skip-permissions"
   echo -e "  ${YELLOW}[!]${NC} Auth nötig: su - alex && claude login"
 else
   echo -e "  ${YELLOW}[!]${NC} Claude Code nicht installiert — manuell: npm install -g @anthropic-ai/claude-code"
