@@ -683,6 +683,15 @@ CRONFILE
 chmod 644 /etc/cron.d/claude-update
 log "Claude-Update-Cron eingerichtet (/etc/cron.d/claude-update, 04:30 UTC, User: root)"
 
+# Gemini CLI täglich updaten (Abo-Modus via OAuth — kein API Key)
+cat > /etc/cron.d/gemini-update << 'CRONFILE'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+45 4 * * * root npm install -g @google/gemini-cli@latest >> /var/log/gemini-update.log 2>&1
+CRONFILE
+chmod 644 /etc/cron.d/gemini-update
+log "Gemini-Update-Cron eingerichtet (/etc/cron.d/gemini-update, 04:45 UTC, User: root)"
+
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow ssh
@@ -690,9 +699,9 @@ ufw --force enable
 log "Firewall konfiguriert"
 
 # ─────────────────────────────────────────────────────────────
-# SCHRITT 8 — CLAUDE CODE CLI
+# SCHRITT 8 — CLAUDE CODE CLI + GEMINI CLI
 # ─────────────────────────────────────────────────────────────
-info "Schritt 8/8 — Claude Code CLI installieren..."
+info "Schritt 8/8 — Claude Code CLI + Gemini CLI installieren..."
 
 CLAUDE_INSTALL_OK=false
 if npm install -g @anthropic-ai/claude-code@latest >/dev/null 2>&1; then
@@ -723,6 +732,29 @@ else
   echo "alias claude='claude --dangerously-skip-permissions'" >> /home/alex/.bashrc
 fi
 log "claude alias gesetzt (--dangerously-skip-permissions)"
+
+# ── Gemini CLI ────────────────────────────────────────────────────────────────
+# Abo-Modus: Google AI Pro/Ultra — Auth via OAuth (gemini auth login)
+# Kein GEMINI_API_KEY nötig; Credentials werden in ~/.gemini/ gecacht.
+GEMINI_INSTALL_OK=false
+if npm install -g @google/gemini-cli@latest >/dev/null 2>&1; then
+  GEMINI_VERSION=$(gemini --version 2>/dev/null | head -1 || echo "unbekannt")
+  log "Gemini CLI installiert: $GEMINI_VERSION"
+  GEMINI_INSTALL_OK=true
+else
+  warn "Gemini CLI Installation fehlgeschlagen — manuell: npm install -g @google/gemini-cli"
+fi
+
+# Alten API Key bereinigen falls vorhanden (idempotent)
+if grep -q "GEMINI_API_KEY" /etc/environment 2>/dev/null; then
+  sed -i '/^GEMINI_API_KEY=/d' /etc/environment
+  log "GEMINI_API_KEY aus /etc/environment entfernt (Abo-Modus)"
+fi
+if grep -q "GEMINI_API_KEY" /home/alex/.bashrc 2>/dev/null; then
+  sed -i '/GEMINI_API_KEY/d' /home/alex/.bashrc
+  log "GEMINI_API_KEY aus .bashrc entfernt (Abo-Modus)"
+fi
+log "Gemini CLI läuft im Abo-Modus — Auth nach Bootstrap: su - alex && gemini auth login"
 
 # ─────────────────────────────────────────────────────────────
 # ABSCHLUSS-KONTROLLE — IP, DNS, CF Tunnel, Zeitpläne
@@ -899,6 +931,17 @@ else
 fi
 echo ""
 
+SCHED_GEMINI_OK=false
+GEMINI_CRON_ENTRY=$(grep "gemini-cli" /etc/cron.d/gemini-update 2>/dev/null || echo "")
+if [ "$CRON_DAEMON" = "active" ] && [ -n "$GEMINI_CRON_ENTRY" ]; then
+  echo -e "  ${GREEN}[✓]${NC} 04:45  Gemini CLI Update              [cron]"
+  SCHED_GEMINI_OK=true
+else
+  echo -e "  ${RED}[✗]${NC} 04:45  Gemini CLI Update              [cron] — PROBLEM"
+  [ -z "$GEMINI_CRON_ENTRY" ] && echo "         /etc/cron.d/gemini-update fehlt"
+fi
+echo ""
+
 SCHED_WATCHTOWER_OK=false
 WATCHTOWER_RUNNING=$(docker inspect -f '{{.State.Running}}' watchtower 2>/dev/null || echo "false")
 WATCHTOWER_SCHEDULE=$(docker inspect watchtower 2>/dev/null \
@@ -981,6 +1024,10 @@ if [ -n "$BREVO_KEY" ]; then
     && LINE_CLAUDE="[OK] 04:30  Claude Code Update             [cron]" \
     || LINE_CLAUDE="[!!] 04:30  Claude Code Update             [cron] — PROBLEM"
 
+  $SCHED_GEMINI_OK \
+    && LINE_GEMINI="[OK] 04:45  Gemini CLI Update              [cron]" \
+    || LINE_GEMINI="[!!] 04:45  Gemini CLI Update              [cron] — PROBLEM"
+
   $SCHED_WATCHTOWER_OK \
     && LINE_WATCHTOWER="[OK] 02:30  Watchtower Container-Updates   [Watchtower intern]\n         Schedule: $WATCHTOWER_SCHEDULE" \
     || LINE_WATCHTOWER="[!!] 02:30  Watchtower Container-Updates   [Watchtower intern] — PROBLEM"
@@ -1031,6 +1078,8 @@ Zeitpläne (UTC):
 
   $(echo -e "$LINE_CLAUDE")
 
+  $(echo -e "$LINE_GEMINI")
+
 ----------------------------------------
 Container-Status:
 $CONTAINER_STATUS
@@ -1048,7 +1097,11 @@ Services:
 ----------------------------------------
 Claude Code:
   Modus: Abo (OAuth)
-  Auth nach Bootstrap: su - alex && claude login"
+  Auth nach Bootstrap: su - alex && claude login
+
+Gemini CLI:
+  Modus: Abo (OAuth — Google AI Pro/Ultra)
+  Auth nach Bootstrap: su - alex && gemini auth login"
 
   MAIL_PAYLOAD=$(jq -n \
     --arg subject "Ugly Stack installiert — $VPS_IP ($VPS_HOSTER)" \
@@ -1085,6 +1138,8 @@ echo -e "  ${BLUE}02:00${NC}  Backup → R2 + .env → GitHub + Mail"
 echo -e "  ${BLUE}02:30${NC}  Watchtower Container-Updates"
 echo -e "  ${BLUE}03:00${NC}  unattended-upgrades + Mail"
 echo -e "  ${BLUE}03:30${NC}  Automatischer Reboot (bei Kernel-Update)"
+echo -e "  ${BLUE}04:30${NC}  Claude Code Update"
+echo -e "  ${BLUE}04:45${NC}  Gemini CLI Update"
 echo ""
 echo "  ── Services ───────────────────────────────"
 echo -e "  ${BLUE}claw.beautymolt.com${NC}       OpenClaw"
@@ -1102,6 +1157,14 @@ if $CLAUDE_INSTALL_OK; then
   echo -e "  ${YELLOW}[!]${NC} Auth nötig: su - alex && claude login"
 else
   echo -e "  ${YELLOW}[!]${NC} Claude Code nicht installiert — manuell: npm install -g @anthropic-ai/claude-code"
+fi
+echo ""
+echo "  ── Gemini CLI ─────────────────────────────"
+if $GEMINI_INSTALL_OK; then
+  echo -e "  ${GREEN}[✓]${NC} gemini installiert: $GEMINI_VERSION"
+  echo -e "  ${YELLOW}[!]${NC} Auth nötig: su - alex && gemini auth login"
+else
+  echo -e "  ${YELLOW}[!]${NC} Gemini CLI nicht installiert — manuell: npm install -g @google/gemini-cli"
 fi
 echo ""
 if [ "$BACKUP_RESTORED" = false ]; then
