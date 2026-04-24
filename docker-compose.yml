@@ -7,6 +7,8 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    mem_limit: 128m
+    memswap_limit: 192m
     networks:
       - ugly-net
     depends_on:
@@ -19,6 +21,8 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./www:/var/www/html:rw
+    mem_limit: 128m
+    memswap_limit: 192m
     networks:
       - ugly-net
 
@@ -43,6 +47,8 @@ services:
     volumes:
       - ./openclaw-data:/home/node/.openclaw
       - ./www:/home/node/www  # Webadmin: schreibt HTML/CSS hier — nginx serviert aus /var/www/html
+    mem_limit: 1500m
+    memswap_limit: 2500m
     labels:
       # sqlite3 nach jedem Watchtower-Update neu installieren (nicht im offiziellen Image enthalten)
       - "com.centurylinklabs.watchtower.lifecycle.post-update=/bin/sh -c 'apt-get update -qq && apt-get install -y -qq sqlite3'"
@@ -61,6 +67,8 @@ services:
     environment:
       - SEARXNG_BASE_URL=https://search.beautymolt.com
       - TZ=${TZ}
+    mem_limit: 256m
+    memswap_limit: 384m
     networks:
       - ugly-net
 
@@ -87,6 +95,8 @@ services:
       - TZ=${TZ}
     volumes:
       - ./n8n-data:/home/node/.n8n
+    mem_limit: 512m
+    memswap_limit: 768m
     networks:
       - ugly-net
 
@@ -105,6 +115,8 @@ services:
     volumes:
       - ./roundcube-data:/var/roundcube/db
       - ./roundcube-temp:/tmp/roundcube-temp
+    mem_limit: 256m
+    memswap_limit: 384m
     networks:
       - ugly-net
 
@@ -114,6 +126,8 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    mem_limit: 128m
+    memswap_limit: 192m
     environment:
       # Zeitplan: 02:30 UTC (nach Backup 02:00, vor unattended-upgrades 03:00)
       - WATCHTOWER_SCHEDULE=0 30 2 * * *
@@ -138,6 +152,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer-data:/data
+    mem_limit: 128m
+    memswap_limit: 192m
     networks:
       - ugly-net
     command: --http-enabled --trusted-origins portainer.beautymolt.com
@@ -151,6 +167,8 @@ services:
       - WHISPER_LANGUAGE=de
     volumes:
       - whisper-models:/var/lib/whisper
+    mem_limit: 768m
+    memswap_limit: 1024m
     networks:
       - ugly-net
 
@@ -161,6 +179,8 @@ services:
     volumes:
       - ./tts-data/config:/app/config
       - ./tts-data/voices:/app/voices
+    mem_limit: 256m
+    memswap_limit: 384m
     networks:
       - ugly-net
 
@@ -180,6 +200,8 @@ services:
       - TZ=${TZ}
     volumes:
       - ./hermes-data:/root/.hermes
+    mem_limit: 512m
+    memswap_limit: 768m
     networks:
       - ugly-net
 

@@ -227,6 +227,30 @@ systemctl daemon-reload
 systemctl enable unattended-upgrades
 systemctl restart unattended-upgrades
 log "unattended-upgrades konfiguriert (03:00 UTC, Reboot 03:30, Mail-Hook aktiv)"
+
+# ── Swapfile (4 GB) ──────────────────────────────────────────────────────────
+info "Swapfile einrichten (4 GB)..."
+SWAPFILE=/swapfile
+if swapon --show | grep -q "$SWAPFILE"; then
+  log "Swapfile bereits aktiv — übersprungen"
+else
+  if [ ! -f "$SWAPFILE" ]; then
+    fallocate -l 4G "$SWAPFILE" 2>/dev/null || dd if=/dev/zero of="$SWAPFILE" bs=1M count=4096 status=none
+    chmod 600 "$SWAPFILE"
+    mkswap "$SWAPFILE" >/dev/null
+  fi
+  swapon "$SWAPFILE"
+  grep -q "$SWAPFILE" /etc/fstab || echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+  log "Swapfile aktiv: 4 GB (persistent via /etc/fstab)"
+fi
+
+# ── Kernel-Tuning für Memory-Pressure ────────────────────────────────────────
+cat > /etc/sysctl.d/99-ugly-memory.conf << 'SYSCTL'
+vm.swappiness=10
+vm.vfs_cache_pressure=50
+SYSCTL
+sysctl -p /etc/sysctl.d/99-ugly-memory.conf >/dev/null
+log "Kernel-Tuning: swappiness=10, vfs_cache_pressure=50"
 log "System bereit"
 
 # ─────────────────────────────────────────────────────────────
@@ -712,17 +736,15 @@ else
   warn "Claude Code Installation fehlgeschlagen — manuell: npm install -g @anthropic-ai/claude-code"
 fi
 
-# Abo-Modus: kein ANTHROPIC_API_KEY — Auth via OAuth (claude login)
-# Alten Key bereinigen falls aus früherer Installation vorhanden (idempotent)
-if grep -q "ANTHROPIC_API_KEY" /etc/environment 2>/dev/null; then
-  sed -i '/^ANTHROPIC_API_KEY=/d' /etc/environment
-  log "ANTHROPIC_API_KEY aus /etc/environment entfernt (Abo-Modus)"
-fi
-if grep -q "ANTHROPIC_API_KEY" /home/alex/.bashrc 2>/dev/null; then
+# API-Key-Modus: ANTHROPIC_API_KEY aus .env in ~/.bashrc exportieren (idempotent)
+ANTHROPIC_API_KEY_VALUE=$(grep "^ANTHROPIC_API_KEY=" "$STACK_DIR/.env" | cut -d= -f2-)
+if [ -n "$ANTHROPIC_API_KEY_VALUE" ]; then
   sed -i '/ANTHROPIC_API_KEY/d' /home/alex/.bashrc
-  log "ANTHROPIC_API_KEY aus .bashrc entfernt (Abo-Modus)"
+  echo "export ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY_VALUE}" >> /home/alex/.bashrc
+  log "ANTHROPIC_API_KEY in ~/.bashrc gesetzt (API-Key-Modus)"
+else
+  warn "ANTHROPIC_API_KEY nicht in .env gefunden — Claude CLI ohne Key"
 fi
-log "Claude Code läuft im Abo-Modus — Auth nach Bootstrap: su - alex && claude login"
 
 # Alias: claude immer mit --dangerously-skip-permissions aufrufen
 # CLAUDE.md im Projektverzeichnis enthält strikte Verhaltensregeln — der Flag ist sicher
@@ -1096,8 +1118,7 @@ Services:
 
 ----------------------------------------
 Claude Code:
-  Modus: Abo (OAuth)
-  Auth nach Bootstrap: su - alex && claude login
+  Modus: API-Key (ANTHROPIC_API_KEY aus .env)
 
 Gemini CLI:
   Modus: Abo (OAuth — Google AI Pro/Ultra)
@@ -1154,7 +1175,7 @@ echo "  ── Claude Code ─────────────────�
 if $CLAUDE_INSTALL_OK; then
   echo -e "  ${GREEN}[✓]${NC} claude installiert: $CLAUDE_VERSION"
   echo -e "  ${GREEN}[✓]${NC} alias: claude --dangerously-skip-permissions"
-  echo -e "  ${YELLOW}[!]${NC} Auth nötig: su - alex && claude login"
+  echo -e "  ${GREEN}[✓]${NC} ANTHROPIC_API_KEY in ~/.bashrc gesetzt"
 else
   echo -e "  ${YELLOW}[!]${NC} Claude Code nicht installiert — manuell: npm install -g @anthropic-ai/claude-code"
 fi
