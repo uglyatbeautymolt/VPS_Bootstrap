@@ -675,6 +675,14 @@ CRONFILE
 chmod 644 /etc/cron.d/ugly-backup
 log "Backup-Cron eingerichtet (/etc/cron.d/ugly-backup, 02:00 UTC, User: alex)"
 
+cat > /etc/cron.d/claude-update << 'CRONFILE'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+30 4 * * * root npm install -g @anthropic-ai/claude-code@latest >> /var/log/claude-update.log 2>&1
+CRONFILE
+chmod 644 /etc/cron.d/claude-update
+log "Claude-Update-Cron eingerichtet (/etc/cron.d/claude-update, 04:30 UTC, User: root)"
+
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow ssh
@@ -687,7 +695,7 @@ log "Firewall konfiguriert"
 info "Schritt 8/8 — Claude Code CLI installieren..."
 
 CLAUDE_INSTALL_OK=false
-if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1; then
+if npm install -g @anthropic-ai/claude-code@latest >/dev/null 2>&1; then
   CLAUDE_VERSION=$(claude --version 2>/dev/null | head -1 || echo "unbekannt")
   log "Claude Code installiert: $CLAUDE_VERSION"
   CLAUDE_INSTALL_OK=true
@@ -880,6 +888,17 @@ else
 fi
 echo ""
 
+SCHED_CLAUDE_OK=false
+CLAUDE_CRON_ENTRY=$(grep "claude-code" /etc/cron.d/claude-update 2>/dev/null || echo "")
+if [ "$CRON_DAEMON" = "active" ] && [ -n "$CLAUDE_CRON_ENTRY" ]; then
+  echo -e "  ${GREEN}[✓]${NC} 04:30  Claude Code Update             [cron]"
+  SCHED_CLAUDE_OK=true
+else
+  echo -e "  ${RED}[✗]${NC} 04:30  Claude Code Update             [cron] — PROBLEM"
+  [ -z "$CLAUDE_CRON_ENTRY" ] && echo "         /etc/cron.d/claude-update fehlt"
+fi
+echo ""
+
 SCHED_WATCHTOWER_OK=false
 WATCHTOWER_RUNNING=$(docker inspect -f '{{.State.Running}}' watchtower 2>/dev/null || echo "false")
 WATCHTOWER_SCHEDULE=$(docker inspect watchtower 2>/dev/null \
@@ -958,6 +977,10 @@ if [ -n "$BREVO_KEY" ]; then
     && LINE_BACKUP="[OK] 02:00  Backup + .env sync + Mail     [cron]" \
     || LINE_BACKUP="[!!] 02:00  Backup + .env sync + Mail     [cron] — PROBLEM"
 
+  $SCHED_CLAUDE_OK \
+    && LINE_CLAUDE="[OK] 04:30  Claude Code Update             [cron]" \
+    || LINE_CLAUDE="[!!] 04:30  Claude Code Update             [cron] — PROBLEM"
+
   $SCHED_WATCHTOWER_OK \
     && LINE_WATCHTOWER="[OK] 02:30  Watchtower Container-Updates   [Watchtower intern]\n         Schedule: $WATCHTOWER_SCHEDULE" \
     || LINE_WATCHTOWER="[!!] 02:30  Watchtower Container-Updates   [Watchtower intern] — PROBLEM"
@@ -1005,6 +1028,8 @@ Zeitpläne (UTC):
   $(echo -e "$LINE_UPGRADES")
 
   $(echo -e "$LINE_REBOOT")
+
+  $(echo -e "$LINE_CLAUDE")
 
 ----------------------------------------
 Container-Status:
