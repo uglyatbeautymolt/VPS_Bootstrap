@@ -61,6 +61,20 @@ EOF
   chmod 600 "$AUTH_FILE"
 }
 
+# ── Login + claude starten ────────────────────────────────────
+do_login() {
+  local mode="$1"
+  local label="$2"
+  write_auth "$mode"
+  source "$AUTH_FILE"
+  clear
+  echo ""
+  echo -e "  ${GREEN}[✓]${NC} Eingeloggt als: ${BOLD}${label}${NC}"
+  echo -e "  ${BLUE}[→]${NC} Claude wird gestartet..."
+  echo ""
+  exec claude
+}
+
 # ── Hauptmenü ────────────────────────────────────────────────
 while true; do
   ACTIVE=$(get_active_mode)
@@ -88,24 +102,8 @@ while true; do
   read -r CHOICE
 
   case "$CHOICE" in
-    1)
-      write_auth "oauth"
-      source "$AUTH_FILE"
-      echo ""
-      echo -e "  ${GREEN}[✓]${NC} Gewechselt zu: Claude OAuth Token"
-      echo -e "  ${YELLOW}[!]${NC} Für neue Sessions: source ~/.bashrc"
-      echo ""
-      read -p "  Enter zum Fortfahren..." _
-      ;;
-    2)
-      write_auth "apikey"
-      source "$AUTH_FILE"
-      echo ""
-      echo -e "  ${GREEN}[✓]${NC} Gewechselt zu: Claude API Key"
-      echo -e "  ${YELLOW}[!]${NC} Für neue Sessions: source ~/.bashrc"
-      echo ""
-      read -p "  Enter zum Fortfahren..." _
-      ;;
+    1) do_login "oauth"  "Claude — OAuth Token (Subscription)" ;;
+    2) do_login "apikey" "Claude — API Key" ;;
     q|Q)
       echo ""
       echo -e "  ${BLUE}[→]${NC} Aktiv bleibt: ${GREEN}${ACTIVE_LABEL}${NC}"
