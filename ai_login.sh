@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────
 #  AI Login Manager
 #  Verwaltet Claude Code Authentifizierung auf dem VPS
-#  Quelle: ~/ugly-stack/.env
+#  Quelle: ~/ugly-stack/.env (nur gezielt ausgelesen, nie gesourced)
 #  Auth-Datei: ~/.claude-auth (wird von ~/.bashrc gesourced)
 # ─────────────────────────────────────────────────────────────
 
@@ -18,10 +18,17 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-# ── Werte aus .env lesen ─────────────────────────────────────
-source "$ENV_FILE"
-[ -z "$ANTHROPIC_API_KEY" ]       && { echo -e "${RED}[✗]${NC} ANTHROPIC_API_KEY fehlt in .env";      exit 1; }
-[ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] && { echo -e "${RED}[✗]${NC} CLAUDE_CODE_OAUTH_TOKEN fehlt in .env"; exit 1; }
+# ── Werte gezielt aus .env lesen — NIE source ─────────────────
+# so werden keine Keys ungewollt ins Environment exportiert
+read_env_val() {
+  grep "^${1}=" "$ENV_FILE" | head -1 | cut -d'=' -f2-
+}
+
+API_KEY_VAL=$(read_env_val "ANTHROPIC_API_KEY")
+OAUTH_TOKEN_VAL=$(read_env_val "CLAUDE_CODE_OAUTH_TOKEN")
+
+[ -z "$API_KEY_VAL" ]    && { echo -e "${RED}[✗]${NC} ANTHROPIC_API_KEY fehlt in .env";      exit 1; }
+[ -z "$OAUTH_TOKEN_VAL" ] && { echo -e "${RED}[✗]${NC} CLAUDE_CODE_OAUTH_TOKEN fehlt in .env"; exit 1; }
 
 # ── ~/.bashrc einmalig umstellen ─────────────────────────────
 if grep -q "^export ANTHROPIC_API_KEY=" "$BASHRC"; then
@@ -49,13 +56,13 @@ write_auth() {
     cat > "$AUTH_FILE" <<EOF
 # AI Login — verwaltet durch ai_login.sh
 unset ANTHROPIC_API_KEY
-export CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN"
+export CLAUDE_CODE_OAUTH_TOKEN="${OAUTH_TOKEN_VAL}"
 EOF
   elif [ "$mode" = "apikey" ]; then
     cat > "$AUTH_FILE" <<EOF
 # AI Login — verwaltet durch ai_login.sh
 unset CLAUDE_CODE_OAUTH_TOKEN
-export ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+export ANTHROPIC_API_KEY="${API_KEY_VAL}"
 EOF
   fi
   chmod 600 "$AUTH_FILE"
@@ -66,6 +73,9 @@ do_login() {
   local mode="$1"
   local label="$2"
   write_auth "$mode"
+  # Umgebung sauber setzen bevor claude gestartet wird
+  unset ANTHROPIC_API_KEY
+  unset CLAUDE_CODE_OAUTH_TOKEN
   source "$AUTH_FILE"
   clear
   echo ""
