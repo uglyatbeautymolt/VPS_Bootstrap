@@ -19,7 +19,6 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # ── Werte gezielt aus .env lesen — NIE source ─────────────────
-# so werden keine Keys ungewollt ins Environment exportiert
 read_env_val() {
   grep "^${1}=" "$ENV_FILE" | head -1 | cut -d'=' -f2-
 }
@@ -27,7 +26,7 @@ read_env_val() {
 API_KEY_VAL=$(read_env_val "ANTHROPIC_API_KEY")
 OAUTH_TOKEN_VAL=$(read_env_val "CLAUDE_CODE_OAUTH_TOKEN")
 
-[ -z "$API_KEY_VAL" ]    && { echo -e "${RED}[✗]${NC} ANTHROPIC_API_KEY fehlt in .env";      exit 1; }
+[ -z "$API_KEY_VAL" ]     && { echo -e "${RED}[✗]${NC} ANTHROPIC_API_KEY fehlt in .env";      exit 1; }
 [ -z "$OAUTH_TOKEN_VAL" ] && { echo -e "${RED}[✗]${NC} CLAUDE_CODE_OAUTH_TOKEN fehlt in .env"; exit 1; }
 
 # ── ~/.bashrc einmalig umstellen ─────────────────────────────
@@ -69,20 +68,28 @@ EOF
 }
 
 # ── Login + claude starten ────────────────────────────────────
+DANGEROUS=0
+
 do_login() {
   local mode="$1"
   local label="$2"
   write_auth "$mode"
-  # Umgebung sauber setzen bevor claude gestartet wird
   unset ANTHROPIC_API_KEY
   unset CLAUDE_CODE_OAUTH_TOKEN
   source "$AUTH_FILE"
   clear
   echo ""
   echo -e "  ${GREEN}[✓]${NC} Eingeloggt als: ${BOLD}${label}${NC}"
-  echo -e "  ${BLUE}[→]${NC} Claude wird gestartet..."
-  echo ""
-  exec claude
+  if [ "$DANGEROUS" = "1" ]; then
+    echo -e "  ${RED}[!]${NC} Dangerous Mode aktiv: --dangerously-skip-permissions"
+    echo -e "  ${BLUE}[→]${NC} Claude wird gestartet..."
+    echo ""
+    exec claude --dangerously-skip-permissions
+  else
+    echo -e "  ${BLUE}[→]${NC} Claude wird gestartet..."
+    echo ""
+    exec claude
+  fi
 }
 
 # ── Hauptmenü ────────────────────────────────────────────────
@@ -95,16 +102,24 @@ while true; do
     *)      ACTIVE_LABEL="(keiner)" ;;
   esac
 
+  if [ "$DANGEROUS" = "1" ]; then
+    DANGEROUS_LABEL="${RED}AN ⚡${NC}"
+  else
+    DANGEROUS_LABEL="${GREEN}AUS${NC}"
+  fi
+
   clear
   echo ""
   echo -e "  ${BOLD}╔══════════════════════════════════════════╗${NC}"
   echo -e "  ${BOLD}║          AI Login Manager                ║${NC}"
   echo -e "  ${BOLD}╠══════════════════════════════════════════╣${NC}"
-  echo -e "  ${BOLD}║${NC}  Aktiv: ${GREEN}${ACTIVE_LABEL}${NC}"
+  echo -e "  ${BOLD}║${NC}  Aktiv:     ${GREEN}${ACTIVE_LABEL}${NC}"
+  echo -e "  ${BOLD}║${NC}  Dangerous: $(echo -e ${DANGEROUS_LABEL})"
   echo -e "  ${BOLD}╠══════════════════════════════════════════╣${NC}"
   echo -e "  ${BOLD}║${NC}  ${CYAN}1)${NC} Claude — OAuth Token (Subscription)"
   echo -e "  ${BOLD}║${NC}  ${CYAN}2)${NC} Claude — API Key"
   echo -e "  ${BOLD}║${NC}  ────────────────────────────────────"
+  echo -e "  ${BOLD}║${NC}  ${CYAN}d)${NC} Dangerous Mode togglen"
   echo -e "  ${BOLD}║${NC}  ${CYAN}q)${NC} Beenden"
   echo -e "  ${BOLD}╚══════════════════════════════════════════╝${NC}"
   echo ""
@@ -114,6 +129,9 @@ while true; do
   case "$CHOICE" in
     1) do_login "oauth"  "Claude — OAuth Token (Subscription)" ;;
     2) do_login "apikey" "Claude — API Key" ;;
+    d|D)
+      [ "$DANGEROUS" = "1" ] && DANGEROUS=0 || DANGEROUS=1
+      ;;
     q|Q)
       echo ""
       echo -e "  ${BLUE}[→]${NC} Aktiv bleibt: ${GREEN}${ACTIVE_LABEL}${NC}"
