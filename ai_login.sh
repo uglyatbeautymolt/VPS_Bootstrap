@@ -29,7 +29,7 @@ if grep -q "^export ANTHROPIC_API_KEY=" "$BASHRC"; then
   echo -e "${YELLOW}[!]${NC} ~/.bashrc angepasst — ANTHROPIC_API_KEY durch source ~/.claude-auth ersetzt"
 fi
 
-# ── Aktuellen Modus ermitteln ─────────────────────────────────
+# ── Aktuellen Modus ermitteln ────────────────────────────────
 get_active_mode() {
   if [ ! -f "$AUTH_FILE" ]; then
     echo "none"
@@ -48,14 +48,14 @@ write_auth() {
   if [ "$mode" = "oauth" ]; then
     cat > "$AUTH_FILE" <<EOF
 # AI Login — verwaltet durch ai_login.sh
-# export ANTHROPIC_API_KEY="..."   ← inaktiv
+unset ANTHROPIC_API_KEY
 export CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_CODE_OAUTH_TOKEN"
 EOF
   elif [ "$mode" = "apikey" ]; then
     cat > "$AUTH_FILE" <<EOF
 # AI Login — verwaltet durch ai_login.sh
+unset CLAUDE_CODE_OAUTH_TOKEN
 export ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
-# export CLAUDE_CODE_OAUTH_TOKEN="..."   ← inaktiv
 EOF
   fi
   chmod 600 "$AUTH_FILE"
