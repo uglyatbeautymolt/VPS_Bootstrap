@@ -8,8 +8,10 @@
 #  5. Container neu starten
 #
 #  Verwendung:
-#    ./set-secret.sh TELEGRAM_BOT_TOKEN "123456:ABC..."
-#    ./set-secret.sh                    (interaktiv)
+#    bash set-secret.sh NAME "WERT"    — direkt (Wert als Argument)
+#    bash set-secret.sh NAME           — Name angeben, Wert wird abgefragt
+#    bash set-secret.sh                — interaktiv (Liste oder neuer Key)
+#    bash set-secret.sh --help         — Hilfe anzeigen
 # ─────────────────────────────────────────────────────────────
 
 STACK_DIR="/home/alex/ugly-stack"
@@ -25,6 +27,24 @@ info() { echo -e "${BLUE}[→]${NC} $1"; }
 warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 fail() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 ask()  { echo -e "${YELLOW}[?]${NC} $1"; }
+
+# ── Help ─────────────────────────────────────────────────────
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+  echo ""
+  echo "Verwendung:"
+  echo "  bash set-secret.sh NAME \"WERT\"    — direkt (Wert als Argument)"
+  echo "  bash set-secret.sh NAME           — Name angeben, Wert wird abgefragt"
+  echo "  bash set-secret.sh                — interaktiv (Liste oder neuer Key)"
+  echo "  bash set-secret.sh --help         — diese Hilfe"
+  echo ""
+  echo "Beispiel:"
+  echo "  bash set-secret.sh BREVO_KEY \"xkeysib-abc123...\""
+  echo "  bash set-secret.sh BREVO_KEY        ← Wert wird versteckt abgefragt"
+  echo ""
+  echo "Hinweis: Kein = zwischen Name und Wert — zwei getrennte Argumente."
+  echo ""
+  exit 0
+fi
 
 [ ! -f "$STACK_DIR/.env" ] && fail ".env nicht gefunden: $STACK_DIR/.env"
 
@@ -75,14 +95,19 @@ else
     ANTHROPIC_API_KEY
     PROJEKT_GPG_KEY
   )
+  echo "  0. Neuen Key manuell eingeben"
   for i in "${!SECRETS[@]}"; do
     echo "  $((i+1)). ${SECRETS[$i]}"
   done
   echo ""
-  ask "Welches Secret? (Nummer oder Name):"
+  ask "Welches Secret? (0 = neuer Key, Nummer oder Name):"
   read -p "  > " CHOICE
 
-  if [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
+  if [ "$CHOICE" = "0" ]; then
+    ask "Name des neuen Keys:"
+    read -p "  > " SECRET_NAME
+    [ -z "$SECRET_NAME" ] && fail "Kein Key-Name eingegeben"
+  elif [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
     SECRET_NAME="${SECRETS[$((CHOICE-1))]}"
     [ -z "$SECRET_NAME" ] && fail "Ungültige Auswahl"
   else
