@@ -297,7 +297,7 @@ cp "$STACK_DIR/scripts/ugly-upgrades-mail.sh" /usr/local/bin/ugly-upgrades-mail.
 chmod +x /usr/local/bin/ugly-upgrades-mail.sh
 log "Scripts ausführbar + ugly-upgrades-mail.sh aus Repo installiert"
 
-mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www,hermes-data}
+mkdir -p "$STACK_DIR"/{openclaw-data,n8n-data,searxng-data,www}
 
 grep -q "roundcube-data/"             "$STACK_DIR/.gitignore" || echo "roundcube-data/"             >> "$STACK_DIR/.gitignore"
 grep -q "backup/www-sync.sh"          "$STACK_DIR/.gitignore" || echo "backup/www-sync.sh"          >> "$STACK_DIR/.gitignore"
@@ -420,57 +420,6 @@ if [ -n "$LATEST" ]; then
   log "Backup wiederhergestellt aus: $LATEST"
 else
   warn "Kein Backup gefunden — frischer Start"
-fi
-
-# ── nginx Block für hermes.beautymolt.com (idempotent) ───────────────────────
-# Wird nach Backup-Restore hinzugefügt — so bleibt das Backup-Conf erhalten
-# und der Block wird nur ergänzt wenn er noch fehlt.
-mkdir -p "$STACK_DIR/nginx/conf.d"
-NGINX_CONF="$STACK_DIR/nginx/conf.d/default.conf"
-if ! grep -q "hermes.beautymolt.com" "$NGINX_CONF" 2>/dev/null; then
-  cat >> "$NGINX_CONF" << 'NGINX_HERMES'
-
-server {
-    listen 80;
-    server_name hermes.beautymolt.com;
-    location / {
-        set $upstream http://hermes:8443;
-        proxy_pass $upstream;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-NGINX_HERMES
-  log "nginx: hermes.beautymolt.com Block hinzugefügt"
-else
-  log "nginx: hermes.beautymolt.com bereits vorhanden"
-fi
-
-# ── hermes config.yaml (idempotent) ──────────────────────────────────────────
-# Minimal-Config damit hermes gateway run ohne interaktiven Setup-Wizard läuft.
-# provider: "auto" erkennt OPENROUTER_API_KEY automatisch aus den Docker Env-Vars.
-# Nicht überschreiben wenn vorhanden (z.B. nach Backup-Restore mit gespeicherter Config).
-if [ ! -f "$STACK_DIR/hermes-data/config.yaml" ]; then
-  mkdir -p "$STACK_DIR/hermes-data"
-  cat > "$STACK_DIR/hermes-data/config.yaml" << 'HERMES_CONFIG'
-model:
-  provider: "auto"
-  base_url: "https://openrouter.ai/api/v1"
-
-terminal:
-  backend: "local"
-  cwd: "."
-  timeout: 180
-
-agent:
-  max_turns: 60
-HERMES_CONFIG
-  log "hermes: config.yaml erstellt (~/.hermes/config.yaml im Container)"
-else
-  log "hermes: config.yaml bereits vorhanden"
 fi
 
 info "openclaw.json prüfen..."
@@ -923,9 +872,6 @@ ensure_cf_tunnel_ingress() {
 
 info "Cloudflare Tunnel Ingress prüfen..."
 
-# Hermes — aktiv
-ensure_cf_tunnel_ingress "hermes.beautymolt.com" "http://nginx:80"
-
 # Weitere Container — in den nächsten Tagen aktivieren:
 # (Zeile auskommentieren + Bootstrap erneut ausführen)
 # ensure_cf_tunnel_ingress "claw.beautymolt.com"      "http://nginx:80"
@@ -1134,7 +1080,6 @@ Services:
   https://n8n.beautymolt.com
   https://www.beautymolt.com
   https://portainer.beautymolt.com
-  https://hermes.beautymolt.com
 
 ----------------------------------------
 Claude Code:
@@ -1189,7 +1134,6 @@ echo -e "  ${BLUE}n8n.beautymolt.com${NC}        n8n"
 echo -e "  ${BLUE}www.beautymolt.com${NC}        nginx"
 echo -e "  ${BLUE}mail.beautymolt.com${NC}       Roundcube"
 echo -e "  ${BLUE}portainer.beautymolt.com${NC}  Portainer"
-echo -e "  ${BLUE}hermes.beautymolt.com${NC}     Hermes Agent"
 echo ""
 echo "  ── Claude Code ────────────────────────────"
 if $CLAUDE_INSTALL_OK; then

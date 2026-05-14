@@ -162,7 +162,6 @@ Frischer Ubuntu 24.04 VPS → ein Befehl → kompletter Stack. Inputs: Bitwarden
 | nginx | www.beautymolt.com | 80 |
 | roundcube | mail.beautymolt.com | 80 |
 | portainer | portainer.beautymolt.com | 9000 (HTTP intern) |
-| hermes | hermes.beautymolt.com | 8443 (Telegram Webhook) |
 | watchtower | — | — |
 | cloudflared | — | — |
 | forge-dashboard | dashboard.beautymolt.com | 3001 (via override) |
@@ -243,17 +242,6 @@ Manuell: `bash backup/backup-master.sh`
 - Passwort-Reset: `docker stop portainer && docker run --rm -v ugly-stack_portainer-data:/data portainer/helper-reset-password --password 'PASSWORT' && docker start portainer`
 - Login: admin / `PORTAINER_ADMIN_PASSWORD` aus `.env` — bootstrap bricht ab wenn nicht vorhanden
 
-## Hermes Agent
-
-- Kein offizielles Docker Image — custom Image aus `hermes/Dockerfile` (build bei Bootstrap)
-- Source: https://github.com/NousResearch/hermes-agent
-- Gateway läuft im Webhook-Modus: `TELEGRAM_WEBHOOK_URL=https://hermes.beautymolt.com/telegram`
-- Daten: `./hermes-data:/root/.hermes` (Bind Mount)
-- Eigener Bot Token: `HERMES_TELEGRAM_BOT_TOKEN` in `.env`
-- Watchtower: bewusst ausgeschlossen (lokaler Build, kein Registry-Pull)
-- Update: `docker compose build hermes && docker compose up -d hermes`
-- Migration von OpenClaw: `docker exec -it hermes hermes claw migrate`
-
 ## Bootstrap
 
 Fragt nur: Bitwarden E-Mail, Master-Passwort (+ OTP), Passwort für alex.
@@ -265,13 +253,8 @@ Versionsformat: `V.YYYYMMDD_HHMMSS` (TZ=Europe/Zurich).
 - `docker-compose.override.yml` liegt in `.gitignore` → überlebt den Re-Run
 - Kein VPS_Bootstrap Repo vorhanden → normaler `git clone`
 
-**Schritt 6 — hermes Image bauen:**
-- `docker compose build hermes` vor `docker compose pull` — lokaler Build aus `hermes/Dockerfile`
-- Kein Watchtower-Update möglich (kein Registry-Image)
-
 **CF Tunnel Ingress (ensure_cf_tunnel_ingress):**
 - Funktion in Abschluss-Kontrolle — idempotent: GET → prüfen → nur bei Fehlen: PUT
-- Aktuell aktiv: `hermes.beautymolt.com`
 - Weitere Container: in docker-compose.yml auskommentiert, bei Bedarf aktivieren
 
 ## ⚠️ Regel: Architektur zuerst

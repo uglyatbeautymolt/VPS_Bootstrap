@@ -143,7 +143,7 @@ services:
       - WATCHTOWER_NOTIFICATION_EMAIL_SERVER_PASSWORD=${BREVO_SMTP_API_KEY}
     networks:
       - ugly-net
-    command: openclaw searxng nginx roundcube whisper tts hermes
+    command: searxng roundcube nginx
 
   portainer:
     image: portainer/portainer-ce:latest
@@ -181,27 +181,6 @@ services:
       - ./tts-data/voices:/app/voices
     mem_limit: 256m
     memswap_limit: 384m
-    networks:
-      - ugly-net
-
-  hermes:
-    image: nousresearch/hermes-agent:latest
-    container_name: hermes
-    restart: unless-stopped
-    command: gateway run
-    environment:
-      - TELEGRAM_BOT_TOKEN=${HERMES_TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_ALLOWED_USERS=${HERMES_TELEGRAM_ALLOWED_USERS}
-      - TELEGRAM_WEBHOOK_URL=https://hermes.beautymolt.com/telegram
-      - TELEGRAM_WEBHOOK_SECRET=${HERMES_TELEGRAM_WEBHOOK_SECRET}
-      - TELEGRAM_WEBHOOK_PORT=8443
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - TERMINAL_ENV=local
-      - TZ=${TZ}
-    volumes:
-      - ./hermes-data:/root/.hermes
-    mem_limit: 512m
-    memswap_limit: 768m
     networks:
       - ugly-net
 
