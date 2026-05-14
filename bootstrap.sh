@@ -1123,6 +1123,16 @@ echo -e "  ${BLUE}www.beautymolt.com${NC}        nginx"
 echo -e "  ${BLUE}mail.beautymolt.com${NC}       Roundcube"
 echo -e "  ${BLUE}portainer.beautymolt.com${NC}  Portainer"
 echo ""
+echo "  ── ugly-forge (separater Stack) ───────────"
+if [ -d "/home/alex/ugly-forge" ] && [ -f "$STACK_DIR/docker-compose.override.yml" ]; then
+  echo -e "  ${GREEN}[✓]${NC} forge gebootstrapped — dashboard.beautymolt.com aktiv"
+else
+  echo -e "  ${YELLOW}[!]${NC} forge nicht gebootstrapped — Dashboard fehlt"
+  echo    "         Nachholen mit:"
+  echo    "           git clone https://github.com/uglyatbeautymolt/ugly-forge.git ~/ugly-forge"
+  echo    "           cd ~/ugly-forge && bash bootstrap.sh"
+fi
+echo ""
 echo "  ── Claude Code ────────────────────────────"
 if $CLAUDE_INSTALL_OK; then
   echo -e "  ${GREEN}[✓]${NC} claude installiert: $CLAUDE_VERSION"
