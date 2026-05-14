@@ -158,35 +158,8 @@ services:
       - ugly-net
     command: --http-enabled --trusted-origins portainer.beautymolt.com
 
-  whisper:
-    image: hwdsl2/whisper-server:latest
-    container_name: whisper
-    restart: unless-stopped
-    environment:
-      - WHISPER_MODEL=small
-      - WHISPER_LANGUAGE=de
-    volumes:
-      - whisper-models:/var/lib/whisper
-    mem_limit: 768m
-    memswap_limit: 1024m
-    networks:
-      - ugly-net
-
-  tts:
-    image: ghcr.io/matatonic/openedai-speech-min:latest
-    container_name: tts
-    restart: unless-stopped
-    volumes:
-      - ./tts-data/config:/app/config
-      - ./tts-data/voices:/app/voices
-    mem_limit: 256m
-    memswap_limit: 384m
-    networks:
-      - ugly-net
-
 volumes:
   portainer-data:
-  whisper-models:
 
 networks:
   ugly-net:
