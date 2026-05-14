@@ -699,6 +699,15 @@ CRONFILE
 chmod 644 /etc/cron.d/ugly-backup
 log "Backup-Cron eingerichtet (/etc/cron.d/ugly-backup, 02:00 UTC, User: alex)"
 
+# Container Healthcheck — laeuft NACH unattended-upgrades (03:00) und Watchtower (02:30)
+cat > /etc/cron.d/ugly-healthcheck << 'CRONFILE'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+30 3 * * * alex bash /home/alex/ugly-stack/backup/healthcheck.sh >> /home/alex/ugly-stack/backup/healthcheck.log 2>&1
+CRONFILE
+chmod 644 /etc/cron.d/ugly-healthcheck
+log "Healthcheck-Cron eingerichtet (/etc/cron.d/ugly-healthcheck, 03:30 UTC, User: alex)"
+
 cat > /etc/cron.d/claude-update << 'CRONFILE'
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
@@ -939,6 +948,17 @@ else
   echo -e "  ${RED}[✗]${NC} 02:00  Backup + .env sync + Mail     [cron] — PROBLEM"
   [ "$CRON_DAEMON" != "active" ] && echo "         cron-Daemon: $CRON_DAEMON"
   [ -z "$CRON_ENTRY" ]           && echo "         /etc/cron.d/ugly-backup fehlt"
+fi
+echo ""
+
+SCHED_HC_OK=false
+HC_CRON_ENTRY=$(grep "healthcheck.sh" /etc/cron.d/ugly-healthcheck 2>/dev/null || echo "")
+if [ "$CRON_DAEMON" = "active" ] && [ -n "$HC_CRON_ENTRY" ]; then
+  echo -e "  ${GREEN}[✓]${NC} 03:30  Container Healthcheck         [cron]"
+  SCHED_HC_OK=true
+else
+  echo -e "  ${RED}[✗]${NC} 03:30  Container Healthcheck         [cron] — PROBLEM"
+  [ -z "$HC_CRON_ENTRY" ] && echo "         /etc/cron.d/ugly-healthcheck fehlt"
 fi
 echo ""
 
