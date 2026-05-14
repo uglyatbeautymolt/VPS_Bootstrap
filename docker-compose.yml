@@ -27,16 +27,20 @@ services:
       - ugly-net
 
   openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
+    image: ghcr.io/openclaw/openclaw:2026.4.24  # 2026.4.26+ entfernt python3 — bricht alle Skills mit `python3 <<'PYEOF'` (watchdog, model-scout, devops)
     container_name: openclaw
     user: "1000:1000"  # node user — verhindert Volume-Ownership-Drift nach Watchtower-Updates
     restart: unless-stopped
-    command: node /app/dist/index.js gateway --allow-unconfigured --bind lan
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"  # nicht auto-updaten — Image-Pin schützt vor python3-Regression
+    command: node /app/dist/index.js gateway --allow-unconfigured --bind lan --port 18789
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
       - OPENCLAW_GATEWAY_BIND=lan
+      - OPENCLAW_GATEWAY_PORT=18789
+      - OPENCLAW_NO_RESPAWN=1
       - OPENCLAW_GATEWAY_CONTROLUI_ALLOWEDORIGINS=["https://claw.beautymolt.com","https://claw.beautymolt.com/"]
       - OPENCLAW_GATEWAY_CONTROLUI_DANGEROUSLYALLOWHOSTHEADERORIGINFALLBACK=true
       - SEARXNG_URL=http://searxng:8080
